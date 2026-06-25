@@ -73,5 +73,11 @@
     "vite": "catalog:",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "embla-carousel-autoplay": "^8.6.0",
+    "qrcode.react": "^4.2.0",
+    "viem": "^2.53.1",
+    "wagmi": "^3.6.19"
   }
 }
