@@ -1,22 +1,28 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Marketplace API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: listings
+    description: Marketplace listings
+  - name: categories
+    description: Listing categories
+  - name: sellers
+    description: Seller profiles
+  - name: reviews
+    description: Listing reviews
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +30,250 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /listings:
+    get:
+      operationId: getListings
+      tags: [listings]
+      summary: Browse all listings
+      parameters:
+        - name: categoryId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: minPrice
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: maxPrice
+          in: query
+          schema:
+            type: ["number", "null"]
+        - name: condition
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: sortBy
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Listing"
+    post:
+      operationId: createListing
+      tags: [listings]
+      summary: Create a new listing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListingInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Listing"
+
+  /listings/featured:
+    get:
+      operationId: getFeaturedListings
+      tags: [listings]
+      summary: Get featured and trending listings
+      responses:
+        "200":
+          description: Featured listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Listing"
+
+  /listings/stats:
+    get:
+      operationId: getMarketplaceStats
+      tags: [listings]
+      summary: Get marketplace statistics
+      responses:
+        "200":
+          description: Marketplace stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketplaceStats"
+
+  /listings/{id}:
+    get:
+      operationId: getListing
+      tags: [listings]
+      summary: Get a single listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Listing detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Listing"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateListing
+      tags: [listings]
+      summary: Update a listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListingUpdate"
+      responses:
+        "200":
+          description: Updated listing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Listing"
+    delete:
+      operationId: deleteListing
+      tags: [listings]
+      summary: Delete a listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /categories:
+    get:
+      operationId: getCategories
+      tags: [categories]
+      summary: List all categories
+      responses:
+        "200":
+          description: Categories with listing counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+
+  /sellers/{id}:
+    get:
+      operationId: getSeller
+      tags: [sellers]
+      summary: Get seller profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Seller profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Seller"
+        "404":
+          description: Not found
+
+  /sellers/{id}/listings:
+    get:
+      operationId: getSellerListings
+      tags: [sellers]
+      summary: Get listings by a seller
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Seller's listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Listing"
+
+  /listings/{id}/reviews:
+    get:
+      operationId: getListingReviews
+      tags: [reviews]
+      summary: Get reviews for a listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Review"
+    post:
+      operationId: createReview
+      tags: [reviews]
+      summary: Post a review for a listing
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewInput"
+      responses:
+        "201":
+          description: Created review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +284,176 @@ components:
       required:
         - status
 
+    Listing:
+      type: object
+      required: [id, title, description, price, categoryId, condition, sellerId, status, createdAt, imageUrl, viewCount, isFeatured]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        categoryId:
+          type: integer
+        categoryName:
+          type: ["string", "null"]
+        condition:
+          type: string
+          enum: [new, like_new, good, fair]
+        sellerId:
+          type: integer
+        sellerName:
+          type: ["string", "null"]
+        sellerAvatar:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, sold, draft]
+        createdAt:
+          type: string
+        imageUrl:
+          type: string
+        viewCount:
+          type: integer
+        isFeatured:
+          type: boolean
+        averageRating:
+          type: ["number", "null"]
+        reviewCount:
+          type: ["integer", "null"]
+
+    ListingInput:
+      type: object
+      required: [title, description, price, categoryId, condition, sellerId, imageUrl]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        price:
+          type: number
+          minimum: 0
+        categoryId:
+          type: integer
+        condition:
+          type: string
+          enum: [new, like_new, good, fair]
+        sellerId:
+          type: integer
+        imageUrl:
+          type: string
+        isFeatured:
+          type: boolean
+
+    ListingUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        categoryId:
+          type: integer
+        condition:
+          type: string
+          enum: [new, like_new, good, fair]
+        status:
+          type: string
+          enum: [active, sold, draft]
+        imageUrl:
+          type: string
+        isFeatured:
+          type: boolean
+
+    Category:
+      type: object
+      required: [id, name, slug, listingCount]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        icon:
+          type: ["string", "null"]
+        listingCount:
+          type: integer
+
+    Seller:
+      type: object
+      required: [id, name, joinedAt, listingCount]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        avatar:
+          type: ["string", "null"]
+        bio:
+          type: ["string", "null"]
+        joinedAt:
+          type: string
+        listingCount:
+          type: integer
+        averageRating:
+          type: ["number", "null"]
+        totalReviews:
+          type: ["integer", "null"]
+
+    Review:
+      type: object
+      required: [id, listingId, reviewerName, rating, createdAt]
+      properties:
+        id:
+          type: integer
+        listingId:
+          type: integer
+        reviewerName:
+          type: string
+        reviewerAvatar:
+          type: ["string", "null"]
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    ReviewInput:
+      type: object
+      required: [reviewerName, rating]
+      properties:
+        reviewerName:
+          type: string
+        reviewerAvatar:
+          type: ["string", "null"]
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: ["string", "null"]
+
+    MarketplaceStats:
+      type: object
+      required: [totalListings, totalSellers, totalCategories, averagePrice]
+      properties:
+        totalListings:
+          type: integer
+        totalSellers:
+          type: integer
+        totalCategories:
+          type: integer
+        averagePrice:
+          type: number
+        newThisWeek:
+          type: integer
