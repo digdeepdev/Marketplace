@@ -24,10 +24,8 @@ const POLYGON_CHAIN_ID = 137;
 const VERSE_CONTRACT = "0xc708d6f2153933daa50b2d0758955be0a93a8fec" as const;
 const USDT_CONTRACT = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" as const;
 const POLYGON_RECIPIENT = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7" as const;
-// Configurable via VITE_SOL_RECIPIENT env var — set before going live
-const SOL_RECIPIENT = (import.meta.env.VITE_SOL_RECIPIENT as string | undefined) ?? "11111111111111111111111111111111";
-// Configurable via VITE_XEC_RECIPIENT env var — set before going live
-const XEC_RECIPIENT = (import.meta.env.VITE_XEC_RECIPIENT as string | undefined) ?? "ecash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0ry9q2nn0f";
+const SOL_RECIPIENT = (import.meta.env.VITE_SOL_RECIPIENT as string | undefined) ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
+const XEC_RECIPIENT = (import.meta.env.VITE_XEC_RECIPIENT as string | undefined) ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
 
 const TOKEN_SYMBOLS: Record<PaymentToken, string> = {
   VERSE: "VERSE",

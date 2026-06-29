@@ -49,12 +49,8 @@ const REQUIRED_VERSE = 2_000n * 10n ** VERSE_DECIMALS;
 const REQUIRED_VERSE_DISPLAY = "2000";
 const RECIPIENT_ADDRESS = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7";
 
-const SOL_PLACEHOLDER = "11111111111111111111111111111111";
-const XEC_PLACEHOLDER = "ecash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0ry9q2nn0f";
-const SOL_RECIPIENT_ADDRESS = process.env.SOL_RECIPIENT_ADDRESS ?? SOL_PLACEHOLDER;
-if (SOL_RECIPIENT_ADDRESS === SOL_PLACEHOLDER) {
-  console.warn("[paywall] WARNING: SOL_RECIPIENT_ADDRESS env var is not set — using placeholder System Program address. Set before going live.");
-}
+const SOL_RECIPIENT_ADDRESS = process.env.SOL_RECIPIENT_ADDRESS ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
+const XEC_RECIPIENT_ADDRESS = process.env.XEC_RECIPIENT_ADDRESS ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
@@ -260,11 +256,6 @@ async function verifySolanaTx(txSignature: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-const XEC_RECIPIENT_ADDRESS = process.env.XEC_RECIPIENT_ADDRESS ?? XEC_PLACEHOLDER;
-if (XEC_RECIPIENT_ADDRESS === XEC_PLACEHOLDER) {
-  console.warn("[paywall] WARNING: XEC_RECIPIENT_ADDRESS env var is not set — using placeholder address. Set before going live.");
 }
 
 async function verifyEcashTx(txid: string): Promise<boolean> {
