@@ -286,18 +286,42 @@ async function verifySolanaTx(txSignature: string): Promise<boolean> {
   }
 }
 
+// Fields that verifyEcashTx depends on are required so that any Blockchair
+// rename (e.g. block_id → blockId, recipient → address) fails validation and
+// surfaces a structured warning instead of silently returning false.
+const BlockchairTxEntrySchema = z.object({
+  transaction: z.object({ block_id: z.number() }),
+  outputs: z.array(
+    z.object({
+      recipient: z.string(),
+      value: z.number(),
+      is_spent: z.boolean().optional(),
+    })
+  ),
+});
+
+// data is optional at the top level — Blockchair may omit it for unknown txids
+// (non-OK HTTP is already rejected before we parse).
+const BlockchairResponseSchema = z.object({
+  data: z.record(z.string(), BlockchairTxEntrySchema).optional(),
+});
+
 async function verifyEcashTx(txid: string): Promise<boolean> {
   try {
     const res = await fetch(`https://api.blockchair.com/ecash/dashboards/transaction/${txid}`, {
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return false;
-    const data = (await res.json()) as {
-      data?: Record<string, {
-        transaction?: { block_id?: number };
-        outputs?: Array<{ recipient?: string; value?: number; is_spent?: boolean }>;
-      }>;
-    };
+
+    const raw: unknown = await res.json();
+    const parsed = BlockchairResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      logger.warn({ txid, rawResponse: raw, zodError: parsed.error.flatten() },
+        "Blockchair response shape mismatch — schema validation failed");
+      return false;
+    }
+
+    const data = parsed.data;
     if (!data.data) return false;
     const txEntry = data.data[txid];
     if (!txEntry) return false;
