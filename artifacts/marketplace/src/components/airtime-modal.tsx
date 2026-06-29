@@ -444,9 +444,9 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-[700px] border-white/5 bg-card/95 backdrop-blur-xl p-0 overflow-y-auto sm:overflow-hidden !rounded-xl shadow-2xl shadow-black/50 max-h-[85dvh] sm:max-h-none">
+      <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-[700px] border-white/5 bg-card/95 backdrop-blur-xl p-0 overflow-hidden !rounded-xl shadow-2xl shadow-black/50 max-h-[92dvh] sm:max-h-[88dvh]">
         {/* ─── Desktop: horizontal row | Mobile: vertical stack ─── */}
-        <div className="flex flex-col sm:flex-row">
+        <div className="flex flex-col sm:flex-row h-full sm:max-h-[88dvh] overflow-hidden">
           {/* Product preview image — desktop only */}
           <div className="hidden sm:block relative sm:w-[45%] sm:shrink-0 overflow-hidden">
             <div className="aspect-[16/10] sm:aspect-auto sm:h-full relative">
@@ -473,8 +473,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             <h3 className="text-white font-bold text-sm mt-1">{product.name}</h3>
           </div>
 
-          {/* Form — scrollable on desktop, part of modal scroll on mobile */}
-          <div className="p-3 sm:p-4 space-y-3 sm:space-y-4 sm:w-[55%] sm:overflow-y-auto sm:max-h-[80dvh]">
+          {/* Form — always scrollable */}
+          <div className="p-3 sm:p-4 space-y-3 sm:w-[55%] overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: "touch" }}>
             <DialogHeader className="text-left space-y-0">
               <DialogTitle className="text-base font-bold sr-only">Top Up</DialogTitle>
               <DialogDescription className="sr-only">
@@ -739,7 +739,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                             value={plan.id}
                             className="text-xs focus:bg-[#136FD3]/10 focus:text-[#136FD3]"
                           >
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-col leading-tight py-0.5">
                               <span className="font-medium">{plan.label}</span>
                               <span className="text-[10px] text-muted-foreground">
                                 {plan.dataValue} · {plan.validity}
@@ -798,53 +798,49 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             </div>
 
             {/* Rate info box — always visible */}
-            <div className="flex items-center gap-2 rounded-lg bg-[#136FD3]/10 border border-[#136FD3]/20 px-3 py-2">
-              <Wallet className="h-3.5 w-3.5 text-[#136FD3] shrink-0" />
-              <div className="flex-1 min-w-0">
-                {nairaAmount > 0 ? (
-                  <>
-                    <p className="text-[10px] text-[#136FD3]/80">You will pay</p>
-                    <p className="text-xs font-bold text-[#136FD3]">
-                      {rateLoading ? (
-                        <span className="inline-flex items-center gap-1">
-                          <RefreshCw className="h-3 w-3 animate-spin" />
-                          Calculating…
-                        </span>
-                      ) : (
-                        `${verseAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} Verse`
-                      )}
+            <div className="rounded-lg bg-[#136FD3]/10 border border-[#136FD3]/20 px-3 py-2 space-y-1">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-3.5 w-3.5 text-[#136FD3] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {nairaAmount > 0 ? (
+                    <>
+                      <p className="text-[10px] text-[#136FD3]/80">You will pay</p>
+                      <p className="text-xs font-bold text-[#136FD3]">
+                        {rateLoading ? (
+                          <span className="inline-flex items-center gap-1">
+                            <RefreshCw className="h-3 w-3 animate-spin" />
+                            Calculating…
+                          </span>
+                        ) : (
+                          `${verseAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} Verse`
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-[10px] text-[#136FD3]/80">
+                      {purchaseType === "data" ? "Select a plan to see cost" : "Enter an amount to see Verse cost"}
                     </p>
-                  </>
-                ) : (
-                  <p className="text-[10px] text-[#136FD3]/80">
-                    {purchaseType === "data" ? "Select a plan to see cost" : "Enter an amount to see Verse cost"}
-                  </p>
-                )}
+                  )}
+                </div>
+                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 text-[9px] px-1.5 py-0 leading-4 h-4 shrink-0">
+                  LIVE
+                </Badge>
               </div>
-              <div className="flex flex-col items-end gap-1 shrink-0">
+              <div className="text-[10px] text-muted-foreground">
                 {rateLoading ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
                     <RefreshCw className="h-2.5 w-2.5 animate-spin" />
-                    Fetching rate…
+                    Fetching live rate…
                   </span>
                 ) : rateError ? (
-                  <span className="text-[10px] text-amber-400/80">
-                    1 ₦ ≈ {FALLBACK_VERSE_PER_NAIRA} Verse
-                  </span>
+                  <span className="text-amber-400/80">1 ₦ ≈ {FALLBACK_VERSE_PER_NAIRA} Verse (fallback)</span>
                 ) : (
-                  <>
-                    <span className="text-[10px] text-muted-foreground">
-                      1 ₦ = {verseAmount > 0 ? (rateData?.versePerNairaWithFee ?? FALLBACK_VERSE_PER_NAIRA).toFixed(4) : baseRate.toFixed(4)} Verse
-                      {feePercent != null && verseAmount > 0 && (
-                        <span className="text-[9px] text-emerald-400/60 ml-1">
-                          (includes {feePercent}% fee)
-                        </span>
-                      )}
-                    </span>
-                    <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 text-[9px] px-1.5 py-0 leading-4 h-4">
-                      LIVE
-                    </Badge>
-                  </>
+                  <span>
+                    1 ₦ = {verseAmount > 0 ? (rateData?.versePerNairaWithFee ?? FALLBACK_VERSE_PER_NAIRA).toFixed(4) : baseRate.toFixed(4)} Verse
+                    {feePercent != null && verseAmount > 0 && (
+                      <span className="text-emerald-400/60 ml-1">(incl. {feePercent}% fee)</span>
+                    )}
+                  </span>
                 )}
               </div>
             </div>
