@@ -1108,7 +1108,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
           phoneNumber,
           nairaAmount: parseFloat(amount) || 0,
           tokenAmount: tokenAmount.toLocaleString(undefined, {
-            maximumFractionDigits: paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 9 : 18,
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
             useGrouping: false,
           }),
           tokenSymbol,
