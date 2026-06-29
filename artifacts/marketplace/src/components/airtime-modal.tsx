@@ -27,6 +27,28 @@ const POLYGON_RECIPIENT = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7" as const;
 const SOL_RECIPIENT = (import.meta.env.VITE_SOL_RECIPIENT as string | undefined) ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
 const XEC_RECIPIENT = (import.meta.env.VITE_XEC_RECIPIENT as string | undefined) ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
 
+// ── Module-load address validation ───────────────────────────────────────────
+// Catches misconfigured VITE_SOL_RECIPIENT / VITE_XEC_RECIPIENT at startup.
+// Base58 alphabet (Solana): no 0, O, I, l — 32–44 characters
+const _SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// eCash cashaddr: "ecash:" prefix + 40–55 lowercase base32 chars
+const _XEC_ADDRESS_RE = /^ecash:[a-z0-9]{40,55}$/;
+
+if (!_SOL_ADDRESS_RE.test(SOL_RECIPIENT)) {
+  console.error(
+    "[VerseKit] CONFIG ERROR: SOL_RECIPIENT does not look like a valid Solana base58 address. " +
+    "Check VITE_SOL_RECIPIENT — payments will be sent to this value:",
+    SOL_RECIPIENT
+  );
+}
+if (!_XEC_ADDRESS_RE.test(XEC_RECIPIENT)) {
+  console.error(
+    "[VerseKit] CONFIG ERROR: XEC_RECIPIENT does not look like a valid eCash cashaddr address " +
+    "(expected ecash:<40-55 base32 chars>). Check VITE_XEC_RECIPIENT — payments will be sent to this value:",
+    XEC_RECIPIENT
+  );
+}
+
 const TOKEN_SYMBOLS: Record<PaymentToken, string> = {
   VERSE: "VERSE",
   USDT_POLYGON: "USDT",

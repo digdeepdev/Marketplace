@@ -1,6 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import nodemailer from "nodemailer";
 import { z } from "zod";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -51,6 +52,25 @@ const RECIPIENT_ADDRESS = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7";
 
 const SOL_RECIPIENT_ADDRESS = process.env.SOL_RECIPIENT_ADDRESS ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
 const XEC_RECIPIENT_ADDRESS = process.env.XEC_RECIPIENT_ADDRESS ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
+
+// ── Startup address validation ────────────────────────────────────────────────
+// Base58 alphabet (Bitcoin/Solana): no 0, O, I, l — 32–44 characters
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// eCash cashaddr: "ecash:" prefix + 40–55 lowercase base32 chars
+const ECASH_ADDRESS_RE = /^ecash:[a-z0-9]{40,55}$/;
+
+if (!SOLANA_ADDRESS_RE.test(SOL_RECIPIENT_ADDRESS)) {
+  logger.error(
+    { SOL_RECIPIENT_ADDRESS },
+    "STARTUP ERROR: SOL_RECIPIENT_ADDRESS does not look like a valid Solana base58 address — payments would be misrouted. Set SOL_RECIPIENT_ADDRESS correctly and restart."
+  );
+}
+if (!ECASH_ADDRESS_RE.test(XEC_RECIPIENT_ADDRESS)) {
+  logger.error(
+    { XEC_RECIPIENT_ADDRESS },
+    "STARTUP ERROR: XEC_RECIPIENT_ADDRESS does not look like a valid eCash cashaddr address (expected ecash:<40-55 base32 chars>) — payments would be misrouted. Set XEC_RECIPIENT_ADDRESS correctly and restart."
+  );
+}
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
