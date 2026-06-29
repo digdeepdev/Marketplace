@@ -249,6 +249,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [selectedPlanId, setSelectedPlanId] = useState<string>("");
+  const [isPlanOpen, setIsPlanOpen] = useState(false);
   const [txStatus, setTxStatus] = useState<TxStatus>("idle");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
@@ -717,15 +718,15 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     disabled={isBusy}
                     className="w-full flex items-center justify-between px-3 h-10 text-sm text-left disabled:opacity-50"
                     style={{ background: "hsl(240,10%,11%)" }}
-                    onClick={() => !isBusy && setSelectedPlanId(selectedPlanId ? "" : "__open__")}
+                    onClick={() => { if (!isBusy) { if (selectedPlan) { setSelectedPlanId(""); setIsPlanOpen(true); } else { setIsPlanOpen((o) => !o); } } }}
                   >
                     <span className={selectedPlan ? "text-foreground" : "text-muted-foreground"}>
                       {selectedPlan ? selectedPlan.label : "Choose a data plan"}
                     </span>
-                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
+                    <ChevronDown className={`h-4 w-4 opacity-50 shrink-0 ml-2 transition-transform ${isPlanOpen && !selectedPlan ? "rotate-180" : ""}`} />
                   </button>
-                  {/* Inline scrollable list — always visible when no plan selected */}
-                  {!selectedPlan && (
+                  {/* Inline scrollable list — shown only after user clicks */}
+                  {isPlanOpen && !selectedPlan && (
                     <div className="border-t border-white/10 max-h-[220px] overflow-y-auto overscroll-contain" style={{ background: "hsl(240,10%,9%)" }}>
                       {(["daily", "weekly", "monthly"] as DataPlanCategory[])
                         .filter((cat) => dataPlans.some((p) => p.category === cat))
@@ -741,7 +742,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                                   key={plan.id}
                                   type="button"
                                   disabled={isBusy}
-                                  onClick={() => !isBusy && setSelectedPlanId(plan.id)}
+                                  onClick={() => { if (!isBusy) { setSelectedPlanId(plan.id); setIsPlanOpen(false); } }}
                                   className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#136FD3]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
                                   style={{ background: "hsl(240,10%,9%)" }}
                                 >
