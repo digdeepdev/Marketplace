@@ -465,8 +465,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             <h3 className="text-white font-bold text-sm mt-1">{product.name}</h3>
           </div>
 
-          {/* Form — always scrollable */}
-          <div className="p-3 sm:p-4 space-y-3 sm:w-[55%] overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: "touch" }}>
+          {/* Form */}
+          <div className="p-3 sm:p-4 space-y-3 sm:w-[55%]">
             <DialogHeader className="text-left space-y-0">
               <DialogTitle className="text-base font-bold sr-only">Top Up</DialogTitle>
               <DialogDescription className="sr-only">
