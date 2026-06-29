@@ -77,6 +77,104 @@ async function buildApp() {
   return app;
 }
 
+// Hex-encoded balanceOf result for exactly 2000 VERSE (2000 * 10^18)
+// 2000 * 10^18 = 0x6C6B935B8BBD400000  (padded to 32 bytes)
+const BALANCE_2000_VERSE_HEX =
+  "0x0000000000000000000000000000000000000000000006c6b935b8bbd400000";
+
+describe("GET /api/paywall/verify-verse-balance", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("returns 400 when walletAddress is missing", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const app = await buildApp();
+
+    const res = await supertest(app).get("/api/paywall/verify-verse-balance");
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when walletAddress is not a valid EVM address", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .get("/api/paywall/verify-verse-balance")
+      .query({ walletAddress: "not-an-address" });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 500 when every Polygon RPC fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const urlStr = String(url);
+        if (
+          urlStr.includes("ankr.com") ||
+          urlStr.includes("publicnode.com") ||
+          urlStr.includes("drpc.org")
+        ) {
+          throw new Error("Network unreachable");
+        }
+        return new Response("{}", { status: 500 });
+      }),
+    );
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .get("/api/paywall/verify-verse-balance")
+      .query({ walletAddress: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({ error: expect.stringContaining("VERSE balance") });
+  });
+
+  it("falls back to second RPC when first fails and returns a valid balance", async () => {
+    const balanceResponse = {
+      jsonrpc: "2.0",
+      id: 1,
+      result: BALANCE_2000_VERSE_HEX,
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        const urlStr = String(url);
+        if (urlStr.includes("ankr.com")) {
+          throw new Error("ankr down");
+        }
+        if (urlStr.includes("publicnode.com") || urlStr.includes("drpc.org")) {
+          return new Response(JSON.stringify(balanceResponse), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return new Response("{}", { status: 500 });
+      }),
+    );
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .get("/api/paywall/verify-verse-balance")
+      .query({ walletAddress: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      eligible: true,
+      balance: "2000",
+      required: "2000",
+    });
+  });
+});
+
 describe("POST /api/paywall/confirm-purchase", () => {
   beforeEach(() => {
     vi.resetModules();
