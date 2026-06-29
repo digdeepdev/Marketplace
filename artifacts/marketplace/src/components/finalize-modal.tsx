@@ -98,7 +98,7 @@ export function FinalizeModal({
 
           <div className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2.5">
             <div className="flex items-center gap-2">
-              <Badge className="bg-[#136FD3]/30 text-[#136FD3] border-[#136FD3]/30 text-[10px] px-2 py-0.5">
+              <Badge className="bg-[#06B6D4]/30 text-[#06B6D4] border-[#06B6D4]/30 text-[10px] px-2 py-0.5">
                 {details.purchaseType === "airtime" ? "Airtime" : "Data"}
               </Badge>
               {details.dataPlan && (
@@ -108,15 +108,15 @@ export function FinalizeModal({
             <h3 className="text-white font-bold text-sm">{product?.name ?? "N/A"}</h3>
             <div className="space-y-1 text-[11px] text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <Smartphone className="h-3 w-3 text-[#136FD3] shrink-0" />
+                <Smartphone className="h-3 w-3 text-[#06B6D4] shrink-0" />
                 <span>{details.phoneNumber}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Wallet className="h-3 w-3 text-[#136FD3] shrink-0" />
+                <Wallet className="h-3 w-3 text-[#06B6D4] shrink-0" />
                 <span>{details.currency}{details.nairaAmount.toLocaleString()}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <Database className="h-3 w-3 text-[#136FD3] shrink-0" />
+                <Database className="h-3 w-3 text-[#06B6D4] shrink-0" />
                 <span>{details.verseAmount} Verse</span>
               </div>
             </div>
@@ -130,7 +130,7 @@ export function FinalizeModal({
                 value={txHash}
                 onChange={(e) => setTxHash(e.target.value)}
                 disabled={isBusy}
-                className="h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#136FD3]/50 font-mono text-[11px]"
+                className="h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50 font-mono text-[11px]"
               />
               <p className="text-[10px] text-muted-foreground">
                 Paste the Polygon transaction hash after sending payment
@@ -142,14 +142,14 @@ export function FinalizeModal({
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1.5">
-                  <Loader2 className="h-3 w-3 animate-spin text-[#136FD3]" />
+                  <Loader2 className="h-3 w-3 animate-spin text-[#06B6D4]" />
                   Finalizing purchase…
                 </span>
                 <span>{Math.ceil(timerSeconds / 60)}m {timerSeconds % 60}s</span>
               </div>
               <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-[#136FD3] transition-all duration-1000 ease-linear"
+                  className="h-full rounded-full bg-[#06B6D4] transition-all duration-1000 ease-linear"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -161,7 +161,7 @@ export function FinalizeModal({
 
           {isCompleted && (
             <div className="text-center space-y-2 py-2">
-              <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto" />
+              <CheckCircle2 className="h-8 w-8 text-[#06B6D4] mx-auto" />
               <p className="text-sm font-semibold text-white">Purchase Submitted</p>
               <p className="text-[11px] text-muted-foreground">
                 Your transaction has been verified and the team has been notified.
@@ -181,7 +181,7 @@ export function FinalizeModal({
 
           {!isCompleted && (
             <Button
-              className="w-full bg-[#136FD3] text-white border-0 font-semibold h-11 hover:bg-[#1060ba]"
+              className="w-full bg-[#06B6D4] text-black border-0 font-semibold h-11 hover:bg-[#0891B2]"
               disabled={isBusy || !isFormValid}
               onClick={() => {
                 const trimmed = txHash.trim();
@@ -199,7 +199,7 @@ export function FinalizeModal({
 
           {isCompleted && (
             <Button
-              className="w-full bg-[#136FD3] text-white border-0 font-semibold h-11 hover:bg-[#1060ba]"
+              className="w-full bg-[#06B6D4] text-black border-0 font-semibold h-11 hover:bg-[#0891B2]"
               onClick={onClose}
             >
               Done

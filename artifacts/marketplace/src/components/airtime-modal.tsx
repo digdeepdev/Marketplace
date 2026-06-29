@@ -449,7 +449,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent sm:bg-gradient-to-r sm:from-transparent sm:via-black/10 sm:to-black/60" />
               <div className="absolute bottom-3 left-3 right-3">
-                <Badge className="bg-[#136FD3]/30 text-[#136FD3] border-[#136FD3]/30 text-[10px] px-2 py-0.5">
+                <Badge className="bg-[#06B6D4]/30 text-[#06B6D4] border-[#06B6D4]/30 text-[10px] px-2 py-0.5">
                   Airtime / Data
                 </Badge>
                 <h3 className="text-white font-bold text-sm mt-1">{product.name}</h3>
@@ -459,7 +459,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
 
           {/* Mobile header — title + tag only (no image) */}
           <div className="sm:hidden px-3 pt-3 pb-0">
-            <Badge className="bg-[#136FD3]/30 text-[#136FD3] border-[#136FD3]/30 text-[10px] px-2 py-0.5">
+            <Badge className="bg-[#06B6D4]/30 text-[#06B6D4] border-[#06B6D4]/30 text-[10px] px-2 py-0.5">
               Airtime / Data
             </Badge>
             <h3 className="text-white font-bold text-sm mt-1">{product.name}</h3>
@@ -479,7 +479,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               {isMobile ? (
                 <>
                   <div className="flex items-center gap-2">
-                    <Wallet className="h-3.5 w-3.5 text-[#136FD3] shrink-0" />
+                    <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
                     <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                       Pay with Verse
                     </span>
@@ -501,7 +501,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-7 px-2 text-[10px] text-[#136FD3] hover:text-[#136FD3] hover:bg-[#136FD3]/10 shrink-0"
+                        className="h-7 px-2 text-[10px] text-[#06B6D4] hover:text-[#06B6D4] hover:bg-[#06B6D4]/10 shrink-0"
                         onClick={async () => {
                           await navigator.clipboard.writeText(RECIPIENT_ADDRESS);
                           setCopied(true);
@@ -525,7 +525,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                 <>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <Wallet className="h-3.5 w-3.5 text-[#136FD3] shrink-0" />
+                      <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
                       <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                         Wallet
                       </span>
@@ -539,7 +539,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full h-8 text-xs border-[#136FD3]/40 text-[#136FD3] hover:bg-[#136FD3]/10 hover:text-[#136FD3]"
+                      className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
                       onClick={connect}
                       disabled={isConnecting || isBusy}
                     >
@@ -573,8 +573,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     </div>
                   ) : eligibilityData ? (
                     isEligible ? (
-                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                      <div className="flex items-center gap-1.5 text-[11px] text-[#06B6D4]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#06B6D4] shrink-0" />
                         {parseFloat(eligibilityData.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })} VERSE — eligible to spend
                       </div>
                     ) : (
@@ -589,8 +589,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                       </div>
                     )
                   ) : (
-                    <div className="text-[11px] text-emerald-400 flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    <div className="text-[11px] text-[#06B6D4] flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#06B6D4] shrink-0" />
                       Connected to Polygon
                     </div>
                   )}
@@ -600,10 +600,10 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
 
             {/* Transaction status banner */}
             {isBusy && (
-              <div className="rounded-lg border border-[#136FD3]/20 bg-[#136FD3]/10 px-3 py-2.5 space-y-1">
+              <div className="rounded-lg border border-[#06B6D4]/20 bg-[#06B6D4]/10 px-3 py-2.5 space-y-1">
                 <div className="flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 text-[#136FD3] animate-spin shrink-0" />
-                  <span className="text-[11px] font-medium text-[#136FD3]">
+                  <Loader2 className="h-3.5 w-3.5 text-[#06B6D4] animate-spin shrink-0" />
+                  <span className="text-[11px] font-medium text-[#06B6D4]">
                     {txStatus === "sending" && "Submitting transaction…"}
                     {txStatus === "confirming" && "Waiting for on-chain confirmation…"}
                     {txStatus === "verifying" && "Verifying transaction & sending notification…"}
@@ -614,7 +614,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     href={`https://polygonscan.com/tx/${txHash}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-[#136FD3]/80 hover:text-[#136FD3]"
+                    className="inline-flex items-center gap-1 text-[10px] text-[#06B6D4]/80 hover:text-[#06B6D4]"
                   >
                     View on Polygonscan <ExternalLink className="h-2.5 w-2.5" />
                   </a>
@@ -622,10 +622,10 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               </div>
             )}
             {isCompleted && (
-              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2.5 space-y-1">
+              <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2.5 space-y-1">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-                  <span className="text-[11px] font-medium text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
+                  <span className="text-[11px] font-medium text-[#06B6D4]">
                     Purchase confirmed!
                   </span>
                 </div>
@@ -634,7 +634,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     href={confirmResult.explorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-emerald-400/80 hover:text-emerald-400"
+                    className="inline-flex items-center gap-1 text-[10px] text-[#06B6D4]/80 hover:text-[#06B6D4]"
                   >
                     View on Polygonscan <ExternalLink className="h-2.5 w-2.5" />
                   </a>
@@ -668,7 +668,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                 disabled={isBusy}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all border cursor-pointer disabled:opacity-50 ${
                   purchaseType === "airtime"
-                    ? "bg-[#136FD3]/15 border-[#136FD3]/40 text-[#136FD3]"
+                    ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
                     : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground"
                 }`}
                 style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
@@ -682,7 +682,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                 disabled={isBusy}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all border cursor-pointer disabled:opacity-50 ${
                   purchaseType === "data"
-                    ? "bg-[#136FD3]/15 border-[#136FD3]/40 text-[#136FD3]"
+                    ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
                     : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground"
                 }`}
                 style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
@@ -702,7 +702,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                 onChange={(e) => !isBusy && setPhoneNumber(e.target.value.replace(/[^0-9]/g, ""))}
                 maxLength={11}
                 disabled={isBusy}
-                className="h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#136FD3]/50"
+                className="h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50"
               />
             </div>
 
@@ -743,14 +743,14 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                                   type="button"
                                   disabled={isBusy}
                                   onClick={() => { if (!isBusy) { setSelectedPlanId(plan.id); setIsPlanOpen(false); } }}
-                                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#136FD3]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
+                                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#06B6D4]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
                                   style={{ background: "hsl(240,10%,9%)" }}
                                 >
                                   <div className="flex flex-col leading-tight min-w-0">
                                     <span className="text-xs font-medium">{plan.label}</span>
                                     <span className="text-[10px] text-muted-foreground">{plan.dataValue} · {plan.validity}</span>
                                   </div>
-                                  <span className="text-xs font-semibold text-[#136FD3] shrink-0 ml-3">₦{plan.price.toLocaleString()}</span>
+                                  <span className="text-xs font-semibold text-[#06B6D4] shrink-0 ml-3">₦{plan.price.toLocaleString()}</span>
                                 </button>
                               ))}
                           </div>
@@ -759,10 +759,10 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                   )}
                   {/* Selected plan — show change link */}
                   {selectedPlan && (
-                    <div className="border-t border-white/10 px-3 py-2 flex items-center justify-between bg-[#136FD3]/10">
+                    <div className="border-t border-white/10 px-3 py-2 flex items-center justify-between bg-[#06B6D4]/10">
                       <div className="flex flex-col leading-tight min-w-0">
-                        <span className="text-[10px] text-[#136FD3]/80">Selected</span>
-                        <span className="text-xs font-semibold text-[#136FD3]">{selectedPlan.dataValue} · {selectedPlan.validity}</span>
+                        <span className="text-[10px] text-[#06B6D4]/80">Selected</span>
+                        <span className="text-xs font-semibold text-[#06B6D4]">{selectedPlan.dataValue} · {selectedPlan.validity}</span>
                       </div>
                       <button
                         type="button"
@@ -780,13 +780,13 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
 
             {/* Data value display — when data plan is selected */}
             {purchaseType === "data" && selectedPlan && (
-              <div className="flex items-center gap-3 rounded-lg bg-[#136FD3]/10 border border-[#136FD3]/20 px-3 py-2.5">
-                <div className="h-8 w-8 rounded-lg bg-[#136FD3]/20 flex items-center justify-center shrink-0">
-                  <Database className="h-4 w-4 text-[#136FD3]" />
+              <div className="flex items-center gap-3 rounded-lg bg-[#06B6D4]/10 border border-[#06B6D4]/20 px-3 py-2.5">
+                <div className="h-8 w-8 rounded-lg bg-[#06B6D4]/20 flex items-center justify-center shrink-0">
+                  <Database className="h-4 w-4 text-[#06B6D4]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-[#136FD3]/80">Data value</p>
-                  <p className="text-sm font-bold text-[#136FD3]">{selectedPlan.dataValue}</p>
+                  <p className="text-[10px] text-[#06B6D4]/80">Data value</p>
+                  <p className="text-sm font-bold text-[#06B6D4]">{selectedPlan.dataValue}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-[10px] text-muted-foreground">Valid for</p>
@@ -812,7 +812,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                 readOnly={purchaseType === "data" && !!selectedPlan || isBusy}
                 min={100}
                 disabled={isBusy}
-                className={`h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#136FD3]/50 ${
+                className={`h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50 ${
                   purchaseType === "data" && selectedPlan ? "opacity-70 cursor-default" : ""
                 }`}
               />
@@ -822,14 +822,14 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             </div>
 
             {/* Rate info box — always visible */}
-            <div className="rounded-lg bg-[#136FD3]/10 border border-[#136FD3]/20 px-3 py-2 space-y-1">
+            <div className="rounded-lg bg-[#06B6D4]/10 border border-[#06B6D4]/20 px-3 py-2 space-y-1">
               <div className="flex items-center gap-2">
-                <Wallet className="h-3.5 w-3.5 text-[#136FD3] shrink-0" />
+                <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
                 <div className="flex-1 min-w-0">
                   {nairaAmount > 0 ? (
                     <>
-                      <p className="text-[10px] text-[#136FD3]/80">You will pay</p>
-                      <p className="text-xs font-bold text-[#136FD3]">
+                      <p className="text-[10px] text-[#06B6D4]/80">You will pay</p>
+                      <p className="text-xs font-bold text-[#06B6D4]">
                         {rateLoading ? (
                           <span className="inline-flex items-center gap-1">
                             <RefreshCw className="h-3 w-3 animate-spin" />
@@ -841,12 +841,12 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                       </p>
                     </>
                   ) : (
-                    <p className="text-[10px] text-[#136FD3]/80">
+                    <p className="text-[10px] text-[#06B6D4]/80">
                       {purchaseType === "data" ? "Select a plan to see cost" : "Enter an amount to see Verse cost"}
                     </p>
                   )}
                 </div>
-                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 text-[9px] px-1.5 py-0 leading-4 h-4 shrink-0">
+                <Badge className="bg-cyan-500/15 text-[#06B6D4] border-cyan-500/20 text-[9px] px-1.5 py-0 leading-4 h-4 shrink-0">
                   LIVE
                 </Badge>
               </div>
@@ -862,7 +862,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                   <span>
                     1 ₦ = {verseAmount > 0 ? (rateData?.versePerNairaWithFee ?? FALLBACK_VERSE_PER_NAIRA).toFixed(4) : baseRate.toFixed(4)} Verse
                     {feePercent != null && verseAmount > 0 && (
-                      <span className="text-emerald-400/60 ml-1">(incl. {feePercent}% fee)</span>
+                      <span className="text-[#06B6D4]/60 ml-1">(incl. {feePercent}% fee)</span>
                     )}
                   </span>
                 )}
@@ -874,7 +874,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               {isMobile ? (
                 <>
                   <Button
-                    className="w-full bg-[#136FD3] text-white border-0 font-semibold h-11 hover:bg-[#1060ba]"
+                    className="w-full bg-[#06B6D4] text-black border-0 font-semibold h-11 hover:bg-[#0891B2]"
                     disabled={!isFormValid || isBusy}
                     onClick={() => {
                       if (!isFormValid) return;

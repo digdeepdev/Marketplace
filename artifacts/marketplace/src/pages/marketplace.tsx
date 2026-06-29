@@ -151,7 +151,7 @@ export default function Marketplace() {
                     {idx === 0 && (
                       <>
                         <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-3">
-                          <span className="text-transparent bg-clip-text bg-[linear-gradient(90deg,#136FD3,#D90BFB)]">
+                          <span className="text-transparent bg-clip-text bg-[linear-gradient(90deg,#06B6D4,#ffffff)]">
                             Marketplace
                           </span>
                         </h1>
@@ -165,7 +165,7 @@ export default function Marketplace() {
                         <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">{slide.title}</h2>
                         <p className="text-white/70 text-sm md:text-base max-w-md mb-6">{slide.subtitle}</p>
                         <a href={slide.category === "banner" ? "#airtime-section" : "#merch-section"}>
-                          <Button className="bg-[#136FD3] text-white border-0 hover:bg-[#1060ba]" size="sm">
+                          <Button className="bg-[#06B6D4] text-black border-0 hover:bg-[#0891B2]" size="sm">
                             {slide.cta}
                             <ArrowRight className="h-4 w-4 ml-2" />
                           </Button>
@@ -184,30 +184,30 @@ export default function Marketplace() {
                 key={idx}
                 onClick={() => carouselRef.current?.scrollTo(idx)}
                 className={`h-2 rounded-full transition-all duration-300 ${
-                  idx === activeIndex ? "w-6 bg-[#136FD3]" : "w-2 bg-white/20 hover:bg-white/40"
+                  idx === activeIndex ? "w-6 bg-[#06B6D4]" : "w-2 bg-white/20 hover:bg-white/40"
                 }`}
                 aria-label={`Go to slide ${idx + 1}`}
               />
             ))}
           </div>
 
-          <CarouselPrevious className="left-4 bg-background/60 border-white/10 hover:bg-background hover:border-[#136FD3]/50" />
-          <CarouselNext className="right-4 bg-background/60 border-white/10 hover:bg-background hover:border-[#136FD3]/50" />
+          <CarouselPrevious className="left-4 bg-background/60 border-white/10 hover:bg-background hover:border-[#06B6D4]/50" />
+          <CarouselNext className="right-4 bg-background/60 border-white/10 hover:bg-background hover:border-[#06B6D4]/50" />
         </Carousel>
       </section>
 
       {/* Ad Banner */}
       <section className="container mx-auto px-4 pb-4 z-10">
-        <div className="relative rounded-xl overflow-hidden border border-white/5 bg-gradient-to-r from-[#136FD3]/20 via-[#0d0d1a] to-[#D90BFB]/20">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(19,111,211,0.12)_0%,transparent_70%)]" />
+        <div className="relative rounded-xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#06B6D4]/15 via-[#0d0d1a] to-white/5">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(6,182,212,0.10)_0%,transparent_70%)]" />
           <div className="relative flex items-center justify-between gap-4 px-5 py-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="h-8 w-8 rounded-lg bg-[#136FD3]/20 flex items-center justify-center shrink-0">
-                <span className="text-sm font-bold text-[#136FD3]">Ads</span>
+              <div className="h-8 w-8 rounded-lg bg-[#06B6D4]/20 flex items-center justify-center shrink-0">
+                <span className="text-sm font-bold text-[#06B6D4]">Ads</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white leading-tight">
-                  Swap <span className="text-[#136FD3]">Verse</span> directly to your wallet
+                  Swap <span className="text-[#06B6D4]">Verse</span> directly to your wallet
                 </p>
                 <p className="text-xs text-white/50 truncate">Sideshift.ai direct to wallet trading</p>
               </div>
@@ -216,7 +216,7 @@ export default function Marketplace() {
               href="https://sideshift.ai/usdtpolygon/versepolygon/a/digdeep"
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 text-xs font-semibold text-[#D90BFB] hover:text-[#e040ff] transition-colors whitespace-nowrap"
+              className="shrink-0 text-xs font-semibold text-white hover:text-[#06B6D4] transition-colors whitespace-nowrap"
             >
               Swap Now →
             </a>
@@ -227,8 +227,8 @@ export default function Marketplace() {
       {/* Airtime & Data Section */}
       <section id="airtime-section" className="container mx-auto px-4 pb-12 z-10">
         <div className="flex items-center gap-2 mb-6">
-          <div className="h-8 w-8 rounded-lg bg-[#136FD3]/15 flex items-center justify-center">
-            <Smartphone className="h-4 w-4 text-[#136FD3]" />
+          <div className="h-8 w-8 rounded-lg bg-[#06B6D4]/15 flex items-center justify-center">
+            <Smartphone className="h-4 w-4 text-[#06B6D4]" />
           </div>
           <h2 className="text-xl font-bold">Airtime & Data</h2>
           <span className="text-sm text-muted-foreground ml-2">{AIRTIME_PRODUCTS.length} products</span>
@@ -243,8 +243,8 @@ export default function Marketplace() {
       {/* Merch Section */}
       <section id="merch-section" className="container mx-auto px-4 pb-24 z-10">
         <div className="flex items-center gap-2 mb-6">
-          <div className="h-8 w-8 rounded-lg bg-[#D90BFB]/15 flex items-center justify-center">
-            <Shirt className="h-4 w-4 text-[#D90BFB]" />
+          <div className="h-8 w-8 rounded-lg bg-white/10 flex items-center justify-center">
+            <Shirt className="h-4 w-4 text-white" />
           </div>
           <h2 className="text-xl font-bold">Verse Merch</h2>
           <span className="text-sm text-muted-foreground ml-2">{MERCH_PRODUCTS.length} products</span>

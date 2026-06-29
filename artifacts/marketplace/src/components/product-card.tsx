@@ -38,8 +38,8 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           <Badge
             className={
               isAirtime
-                ? "bg-[#136FD3]/20 text-[#136FD3] border-[#136FD3]/30 text-[10px] px-1.5 py-0"
-                : "bg-[#D90BFB]/20 text-[#D90BFB] border-[#D90BFB]/30 text-[10px] px-1.5 py-0"
+                ? "bg-[#06B6D4]/20 text-[#06B6D4] border-[#06B6D4]/30 text-[10px] px-1.5 py-0"
+                : "bg-[#ffffff]/20 text-[#ffffff] border-[#ffffff]/30 text-[10px] px-1.5 py-0"
             }
           >
             {isAirtime ? "Airtime / Data" : "Merch"}
@@ -67,8 +67,8 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
             size="sm"
             className={
               isAirtime
-                ? "bg-[#136FD3] text-white text-xs font-semibold px-3 py-1 rounded-lg hover:bg-[#1060ba]"
-                : "bg-[#D90BFB] text-white text-xs font-semibold px-3 py-1 rounded-lg hover:bg-[#c009e0]"
+                ? "bg-[#06B6D4] text-black text-xs font-semibold px-3 py-1 rounded-lg hover:bg-[#0891B2]"
+                : "bg-white/10 text-white text-xs font-semibold px-3 py-1 rounded-lg hover:bg-white/20 border border-white/20"
             }
             onClick={(e) => {
               e.stopPropagation();
