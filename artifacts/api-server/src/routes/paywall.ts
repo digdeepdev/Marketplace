@@ -10,9 +10,12 @@ const GetPaywallVerifyVerseBalanceResponse = z.object({
   required: z.string(),
 });
 
+const PaymentTokenSchema = z.enum(["VERSE", "USDT_POLYGON", "SOL", "ECASH"]);
+export type PaymentToken = z.infer<typeof PaymentTokenSchema>;
+
 const PostPaywallConfirmPurchaseBody = z.object({
   txHash: z.string(),
-  walletAddress: z.string(),
+  walletAddress: z.string().optional(),
   purchaseType: z.string(),
   phoneNumber: z.string(),
   nairaAmount: z.number(),
@@ -20,6 +23,7 @@ const PostPaywallConfirmPurchaseBody = z.object({
   network: z.string().optional(),
   dataPlan: z.string().optional(),
   txUrl: z.string().optional(),
+  paymentToken: PaymentTokenSchema.optional().default("VERSE"),
 });
 
 const PostPaywallConfirmPurchaseResponse = z.object({
@@ -33,15 +37,24 @@ const PostPaywallConfirmPurchaseResponse = z.object({
 type PurchaseEmailBody = z.infer<typeof PostPaywallConfirmPurchaseBody>;
 
 const VERSE_CONTRACT_POLYGON = "0xc708d6f2153933daa50b2d0758955be0a93a8fec";
+const USDT_CONTRACT_POLYGON = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f";
 const POLYGON_RPCS = [
   "https://rpc.ankr.com/polygon",
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
 ];
+const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
 const VERSE_DECIMALS = 18n;
 const REQUIRED_VERSE = 2_000n * 10n ** VERSE_DECIMALS;
 const REQUIRED_VERSE_DISPLAY = "2000";
 const RECIPIENT_ADDRESS = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7";
+
+const SOL_PLACEHOLDER = "11111111111111111111111111111111";
+const XEC_PLACEHOLDER = "ecash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0ry9q2nn0f";
+const SOL_RECIPIENT_ADDRESS = process.env.SOL_RECIPIENT_ADDRESS ?? SOL_PLACEHOLDER;
+if (SOL_RECIPIENT_ADDRESS === SOL_PLACEHOLDER) {
+  console.warn("[paywall] WARNING: SOL_RECIPIENT_ADDRESS env var is not set — using placeholder System Program address. Set before going live.");
+}
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
@@ -49,6 +62,25 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const NOTIFICATION_EMAIL = process.env.NOTIFICATION_EMAIL ?? "digdeepeth@gmail.com";
 const FROM_EMAIL = process.env.FROM_EMAIL ?? "onboarding@resend.dev";
+
+const TOKEN_LABELS: Record<PaymentToken, string> = {
+  VERSE: "VERSE (Polygon)",
+  USDT_POLYGON: "USDT (Polygon)",
+  SOL: "SOL (Solana)",
+  ECASH: "eCash (XEC)",
+};
+
+function explorerUrlForToken(txHash: string, paymentToken: PaymentToken): string {
+  switch (paymentToken) {
+    case "VERSE":
+    case "USDT_POLYGON":
+      return `https://polygonscan.com/tx/${txHash}`;
+    case "SOL":
+      return `https://solscan.io/tx/${txHash}`;
+    case "ECASH":
+      return `https://blockchair.com/ecash/transaction/${txHash}`;
+  }
+}
 
 function makeTransporter() {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null;
@@ -84,27 +116,33 @@ async function sendViaResend(subject: string, html: string): Promise<{ sent: boo
   }
 }
 
-function buildEmailHtml(body: PurchaseEmailBody): string {
+function buildEmailHtml(body: PurchaseEmailBody, explorerUrl: string): string {
   const planRow = body.dataPlan
     ? `<tr><td style="padding:8px;border:1px solid #ddd"><strong>Data Plan</strong></td><td style="padding:8px;border:1px solid #ddd">${body.dataPlan}</td></tr>`
+    : "";
+  const token = body.paymentToken ?? "VERSE";
+  const tokenLabel = TOKEN_LABELS[token] ?? token;
+  const walletRow = body.walletAddress
+    ? `<tr><td style="padding:8px;border:1px solid #ddd"><strong>Wallet</strong></td><td style="padding:8px;border:1px solid #ddd">${body.walletAddress}</td></tr>`
     : "";
   return `<div style="font-family:Arial,sans-serif;max-width:600px">
     <h2 style="color:#136FD3">🔴 New Purchase Alert</h2>
     <table style="border-collapse:collapse;width:100%">
+      <tr><td style="padding:8px;border:1px solid #ddd"><strong>Payment Token</strong></td><td style="padding:8px;border:1px solid #ddd">${tokenLabel}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd"><strong>Type</strong></td><td style="padding:8px;border:1px solid #ddd">${body.purchaseType.toUpperCase()}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd"><strong>Network</strong></td><td style="padding:8px;border:1px solid #ddd">${body.network ?? "N/A"}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd"><strong>Phone</strong></td><td style="padding:8px;border:1px solid #ddd">${body.phoneNumber}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd"><strong>Naira</strong></td><td style="padding:8px;border:1px solid #ddd">₦${body.nairaAmount.toLocaleString()}</td></tr>
-      <tr><td style="padding:8px;border:1px solid #ddd"><strong>Verse</strong></td><td style="padding:8px;border:1px solid #ddd">${body.verseAmount} VERSE</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd"><strong>Amount</strong></td><td style="padding:8px;border:1px solid #ddd">${body.verseAmount} ${tokenLabel}</td></tr>
       ${planRow}
-      <tr><td style="padding:8px;border:1px solid #ddd"><strong>Wallet</strong></td><td style="padding:8px;border:1px solid #ddd">${body.walletAddress}</td></tr>
-      <tr><td style="padding:8px;border:1px solid #ddd"><strong>Tx Hash</strong></td><td style="padding:8px;border:1px solid #ddd"><a href="${body.txUrl ?? `https://polygonscan.com/tx/${body.txHash}`}">${body.txHash}</a></td></tr>
+      ${walletRow}
+      <tr><td style="padding:8px;border:1px solid #ddd"><strong>Tx Hash</strong></td><td style="padding:8px;border:1px solid #ddd"><a href="${explorerUrl}">${body.txHash}</a></td></tr>
     </table></div>`;
 }
 
-async function sendPurchaseEmail(body: PurchaseEmailBody, log?: import("pino").Logger): Promise<{ sent: boolean; error?: string }> {
+async function sendPurchaseEmail(body: PurchaseEmailBody, explorerUrl: string, log?: import("pino").Logger): Promise<{ sent: boolean; error?: string }> {
   const subject = `New ${body.purchaseType === "airtime" ? "Airtime" : "Data"} Purchase — ${body.phoneNumber}`;
-  const html = buildEmailHtml(body);
+  const html = buildEmailHtml(body, explorerUrl);
   const transporter = makeTransporter();
   if (transporter) {
     try {
@@ -161,6 +199,101 @@ function formatUnits(value: bigint, decimals: bigint): string {
   return `${intPart}.${fracPart.toString().padStart(Number(decimals), "0").replace(/0+$/, "")}`;
 }
 
+async function verifyPolygonErc20Tx(txHash: string, tokenContract: string): Promise<boolean> {
+  const receipt = await fetchTransactionReceipt(txHash);
+  if (!receipt) return false;
+  const r = receipt as { status?: string; logs?: Array<{ address?: string; topics?: string[]; data?: string }> };
+  if (r.status !== "0x1") return false;
+  return (r.logs ?? []).some((log) => {
+    const topics = log.topics ?? [];
+    const matchTransfer = topics[0] === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const matchRecipient = topics[2]?.toLowerCase() === "0x000000000000000000000000" + RECIPIENT_ADDRESS.toLowerCase().slice(2);
+    const matchContract = log.address?.toLowerCase() === tokenContract.toLowerCase();
+    return matchTransfer && matchRecipient && matchContract;
+  });
+}
+
+async function verifySolanaTx(txSignature: string): Promise<boolean> {
+  try {
+    const res = await fetch(SOLANA_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1,
+        method: "getTransaction",
+        params: [txSignature, { encoding: "json", maxSupportedTransactionVersion: 0 }],
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as {
+      result?: {
+        meta?: {
+          err?: unknown;
+          preBalances?: number[];
+          postBalances?: number[];
+        };
+        transaction?: {
+          message?: {
+            accountKeys?: string[];
+          };
+        };
+      } | null;
+    };
+    if (!data.result) return false;
+
+    const meta = data.result.meta;
+    const message = data.result.transaction?.message;
+
+    // Tx must have succeeded (no error)
+    if (meta?.err != null) return false;
+
+    // Validate the recipient address received SOL
+    const accountKeys = message?.accountKeys ?? [];
+    const recipientIndex = accountKeys.findIndex((k) => k === SOL_RECIPIENT_ADDRESS);
+    if (recipientIndex === -1) return false;
+
+    const pre = meta?.preBalances?.[recipientIndex] ?? 0;
+    const post = meta?.postBalances?.[recipientIndex] ?? 0;
+    // Recipient must have a positive balance increase
+    return post > pre;
+  } catch {
+    return false;
+  }
+}
+
+const XEC_RECIPIENT_ADDRESS = process.env.XEC_RECIPIENT_ADDRESS ?? XEC_PLACEHOLDER;
+if (XEC_RECIPIENT_ADDRESS === XEC_PLACEHOLDER) {
+  console.warn("[paywall] WARNING: XEC_RECIPIENT_ADDRESS env var is not set — using placeholder address. Set before going live.");
+}
+
+async function verifyEcashTx(txid: string): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.blockchair.com/ecash/dashboards/transaction/${txid}`, {
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as {
+      data?: Record<string, {
+        transaction?: { block_id?: number };
+        outputs?: Array<{ recipient?: string; value?: number; is_spent?: boolean }>;
+      }>;
+    };
+    if (!data.data) return false;
+    const txEntry = data.data[txid];
+    if (!txEntry) return false;
+
+    // Must be confirmed (included in a block)
+    if (!txEntry.transaction?.block_id || txEntry.transaction.block_id < 0) return false;
+
+    // Validate at least one output goes to our XEC recipient with positive value
+    const outputs = txEntry.outputs ?? [];
+    return outputs.some((o) => o.recipient === XEC_RECIPIENT_ADDRESS && (o.value ?? 0) > 0);
+  } catch {
+    return false;
+  }
+}
+
 router.get("/paywall/verify-verse-balance", async (req: Request, res: Response): Promise<void> => {
   const walletAddress = req.query["walletAddress"];
   if (typeof walletAddress !== "string" || !walletAddress) {
@@ -187,28 +320,48 @@ router.post("/paywall/confirm-purchase", async (req: Request, res: Response): Pr
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
   const body = parsed.data;
-  const explorerUrl = body.txUrl ?? `https://polygonscan.com/tx/${body.txHash}`;
+  const paymentToken = body.paymentToken ?? "VERSE";
+  const explorerUrl = body.txUrl ?? explorerUrlForToken(body.txHash, paymentToken);
   let confirmed = false;
+  let verifyError: string | undefined;
 
   try {
-    const receipt = await fetchTransactionReceipt(body.txHash);
-    if (receipt) {
-      const r = receipt as { status?: string; logs?: Array<{ topics?: string[]; data?: string }> };
-      if (r.status === "0x1") {
-        confirmed = (r.logs ?? []).some((log) => {
-          const topics = log.topics ?? [];
-          return topics[0] === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-            && topics[2]?.toLowerCase() === "0x000000000000000000000000" + RECIPIENT_ADDRESS.toLowerCase().slice(2);
-        });
-      }
+    switch (paymentToken) {
+      case "VERSE":
+        confirmed = await verifyPolygonErc20Tx(body.txHash, VERSE_CONTRACT_POLYGON);
+        break;
+      case "USDT_POLYGON":
+        confirmed = await verifyPolygonErc20Tx(body.txHash, USDT_CONTRACT_POLYGON);
+        break;
+      case "SOL":
+        confirmed = await verifySolanaTx(body.txHash);
+        break;
+      case "ECASH":
+        confirmed = await verifyEcashTx(body.txHash);
+        break;
     }
   } catch (err) {
-    req.log.error({ err, txHash: body.txHash }, "Failed to fetch transaction receipt");
+    req.log.error({ err, txHash: body.txHash, paymentToken }, "Failed to verify transaction");
+    verifyError = err instanceof Error ? err.message : String(err);
   }
 
-  const emailResult = await sendPurchaseEmail(body, req.log);
+  if (!confirmed) {
+    req.log.warn({ txHash: body.txHash, paymentToken, verifyError }, "Purchase not confirmed — skipping fulfillment");
+    res.status(402).json({
+      confirmed: false,
+      txHash: body.txHash,
+      explorerUrl,
+      emailSent: false,
+      error: verifyError
+        ? "Transaction verification failed; please try again later."
+        : "Transaction could not be verified on-chain. Check that you sent to the correct address and the transaction is confirmed.",
+    });
+    return;
+  }
+
+  const emailResult = await sendPurchaseEmail(body, explorerUrl, req.log);
   res.json(PostPaywallConfirmPurchaseResponse.parse({
-    confirmed,
+    confirmed: true,
     txHash: body.txHash,
     explorerUrl,
     emailSent: emailResult.sent,

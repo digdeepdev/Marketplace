@@ -12,11 +12,14 @@ import { Badge } from "./ui/badge";
 import { Loader2, CheckCircle2, AlertTriangle, Smartphone, Database, Wallet } from "lucide-react";
 import type { Product } from "./product-card";
 
+export type PaymentToken = "VERSE" | "USDT_POLYGON" | "SOL" | "ECASH";
+
 interface FinalizeDetails {
   purchaseType: string;
   phoneNumber: string;
   nairaAmount: number;
-  verseAmount: string;
+  tokenAmount: string;
+  tokenSymbol: string;
   dataPlan?: string;
   currency: string;
 }
@@ -31,6 +34,51 @@ interface FinalizeModalProps {
   isCompleted: boolean;
   isFailed: boolean;
   error?: string | null;
+  paymentToken?: PaymentToken;
+}
+
+function validateTxHash(hash: string, paymentToken: PaymentToken): boolean {
+  const trimmed = hash.trim();
+  if (!trimmed) return false;
+  switch (paymentToken) {
+    case "VERSE":
+    case "USDT_POLYGON":
+      return /^0x[0-9a-fA-F]{64}$/.test(trimmed);
+    case "SOL":
+      return trimmed.length >= 44 && trimmed.length <= 100 && /^[A-Za-z0-9]+$/.test(trimmed);
+    case "ECASH":
+      return /^[0-9a-fA-F]{64}$/.test(trimmed);
+    default:
+      return trimmed.length > 10;
+  }
+}
+
+function txHashPlaceholder(paymentToken: PaymentToken): string {
+  switch (paymentToken) {
+    case "VERSE":
+    case "USDT_POLYGON":
+      return "0x…";
+    case "SOL":
+      return "Solana transaction signature…";
+    case "ECASH":
+      return "eCash transaction ID (64 hex chars)…";
+    default:
+      return "Transaction hash…";
+  }
+}
+
+function txHashHint(paymentToken: PaymentToken): string {
+  switch (paymentToken) {
+    case "VERSE":
+    case "USDT_POLYGON":
+      return "Paste the Polygon transaction hash after sending payment";
+    case "SOL":
+      return "Paste the Solana transaction signature after sending payment";
+    case "ECASH":
+      return "Paste the eCash (XEC) transaction ID after sending payment";
+    default:
+      return "Paste the transaction hash after sending payment";
+  }
 }
 
 export function FinalizeModal({
@@ -43,6 +91,7 @@ export function FinalizeModal({
   isCompleted,
   isFailed,
   error,
+  paymentToken = "VERSE",
 }: FinalizeModalProps) {
   const [txHash, setTxHash] = useState("");
   const [timerSeconds, setTimerSeconds] = useState(180);
@@ -82,7 +131,7 @@ export function FinalizeModal({
   }, [timerActive]);
 
   const progress = ((180 - timerSeconds) / 180) * 100;
-  const isFormValid = txHash.trim().startsWith("0x");
+  const isFormValid = validateTxHash(txHash, paymentToken);
   const isBusy = isSubmitting || timerActive;
 
   return (
@@ -117,23 +166,23 @@ export function FinalizeModal({
               </div>
               <div className="flex items-center gap-1.5">
                 <Database className="h-3 w-3 text-[#06B6D4] shrink-0" />
-                <span>{details.verseAmount} Verse</span>
+                <span>{details.tokenAmount} {details.tokenSymbol}</span>
               </div>
             </div>
           </div>
 
           {!isBusy && !isCompleted && (
             <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Transaction Hash</label>
+              <label className="text-xs font-medium text-muted-foreground">Transaction Hash / Signature</label>
               <Input
-                placeholder="0x…"
+                placeholder={txHashPlaceholder(paymentToken)}
                 value={txHash}
                 onChange={(e) => setTxHash(e.target.value)}
                 disabled={isBusy}
                 className="h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50 font-mono text-[11px]"
               />
               <p className="text-[10px] text-muted-foreground">
-                Paste the Polygon transaction hash after sending payment
+                {txHashHint(paymentToken)}
               </p>
             </div>
           )}
@@ -185,7 +234,7 @@ export function FinalizeModal({
               disabled={isBusy || !isFormValid}
               onClick={() => {
                 const trimmed = txHash.trim();
-                if (!trimmed.startsWith("0x")) return;
+                if (!validateTxHash(trimmed, paymentToken)) return;
                 onConfirm(trimmed);
               }}
             >

@@ -12,20 +12,72 @@ import { Badge } from "./ui/badge";
 import { QRCodeSVG } from "qrcode.react";
 import { Smartphone, Signal, Wallet, Loader2, RefreshCw, Database, AlertTriangle, ExternalLink, CheckCircle2, Copy, Check, ChevronDown } from "lucide-react";
 import type { Product } from "./product-card";
-import { FinalizeModal } from "./finalize-modal";
-// ── API helpers (plain fetch, no generated client needed) ──────────────────
-type RateData = { versePerNaira: number; versePerNairaWithFee: number; feePercent: number };
-type EligibilityData = { eligible: boolean; balance: string; required: string } | null;
-type ConfirmData = { explorerUrl: string; emailSent: boolean } | null;
+import { FinalizeModal, type PaymentToken } from "./finalize-modal";
+import { useWallet } from "@/hooks/use-wallet";
+import { useSolanaWallet } from "@/hooks/use-solana-wallet";
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { parseUnits, erc20Abi } from "viem";
+import { useIsMobile } from "@/hooks/use-mobile";
 
-function useVerseNairaRate(enabled: boolean) {
-  const [data, setData] = useState<RateData | null>(null);
+// ── Constants ────────────────────────────────────────────────────────────────
+const POLYGON_CHAIN_ID = 137;
+const VERSE_CONTRACT = "0xc708d6f2153933daa50b2d0758955be0a93a8fec" as const;
+const USDT_CONTRACT = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" as const;
+const POLYGON_RECIPIENT = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7" as const;
+// Configurable via VITE_SOL_RECIPIENT env var — set before going live
+const SOL_RECIPIENT = (import.meta.env.VITE_SOL_RECIPIENT as string | undefined) ?? "11111111111111111111111111111111";
+// Configurable via VITE_XEC_RECIPIENT env var — set before going live
+const XEC_RECIPIENT = (import.meta.env.VITE_XEC_RECIPIENT as string | undefined) ?? "ecash:qp3wjpa3tjlj042z2wv7hahsldgwhwy0ry9q2nn0f";
+
+const TOKEN_SYMBOLS: Record<PaymentToken, string> = {
+  VERSE: "VERSE",
+  USDT_POLYGON: "USDT",
+  SOL: "SOL",
+  ECASH: "XEC",
+};
+
+const TOKEN_LABELS: Record<PaymentToken, string> = {
+  VERSE: "VERSE",
+  USDT_POLYGON: "USDT",
+  SOL: "SOL",
+  ECASH: "eCash",
+};
+
+const RECIPIENT_FOR_TOKEN: Record<PaymentToken, string> = {
+  VERSE: POLYGON_RECIPIENT,
+  USDT_POLYGON: POLYGON_RECIPIENT,
+  SOL: SOL_RECIPIENT,
+  ECASH: XEC_RECIPIENT,
+};
+
+const EXPLORER_FOR_TOKEN: Record<PaymentToken, (hash: string) => string> = {
+  VERSE: (h) => `https://polygonscan.com/tx/${h}`,
+  USDT_POLYGON: (h) => `https://polygonscan.com/tx/${h}`,
+  SOL: (h) => `https://solscan.io/tx/${h}`,
+  ECASH: (h) => `https://blockchair.com/ecash/transaction/${h}`,
+};
+
+// Fallback tokenPerNaira rates (with 2% fee, approximate)
+const FALLBACK_RATES: Record<PaymentToken, number> = {
+  VERSE: 1.2,
+  USDT_POLYGON: 0.000630,
+  SOL: 0.0000042,
+  ECASH: 17.99,
+};
+
+// ── API hooks ────────────────────────────────────────────────────────────────
+type TokenRate = { tokenPerNaira: number; nairaPerToken: number; feePercent: number };
+type AllRatesData = { verse: TokenRate; usdt: TokenRate; sol: TokenRate; ecash: TokenRate };
+type EligibilityData = { eligible: boolean; balance: string; required: string } | null;
+
+function useAllRates(enabled: boolean) {
+  const [data, setData] = useState<AllRatesData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(false);
   useEffect(() => {
     if (!enabled) return;
     setIsLoading(true);
-    fetch("/api/prices/verse-naira")
+    fetch("/api/prices/rates")
       .then((r) => r.json())
       .then((d) => { setData(d); setIsLoading(false); })
       .catch(() => { setIsError(true); setIsLoading(false); });
@@ -48,43 +100,35 @@ function useVerseBalance(walletAddress: string | undefined) {
 }
 
 function useConfirmPurchase() {
-  const [data, setData] = useState<ConfirmData>(null);
+  const [data, setData] = useState<{ explorerUrl: string; emailSent: boolean } | null>(null);
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const mutate = (payload: { data: Record<string, unknown> }) => {
     setIsPending(true);
+    setError(null);
     fetch("/api/paywall/confirm-purchase", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload.data),
     })
-      .then((r) => r.json())
-      .then((d) => { setData(d); setIsPending(false); })
-      .catch((e) => { setError(e); setIsPending(false); });
+      .then(async (r) => {
+        const d = (await r.json()) as { confirmed?: boolean; explorerUrl?: string; emailSent?: boolean; error?: string };
+        if (!r.ok || d.confirmed === false) {
+          setError(d.error ?? "Transaction could not be verified on-chain.");
+          setIsPending(false);
+        } else {
+          setData({ explorerUrl: d.explorerUrl ?? "", emailSent: d.emailSent ?? false });
+          setIsPending(false);
+        }
+      })
+      .catch((e: Error) => { setError(e.message); setIsPending(false); });
   };
   return { mutate, data, isPending, error };
 }
-import { useWallet } from "@/hooks/use-wallet";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseUnits } from "viem";
-import { erc20Abi } from "viem";
-import { useIsMobile } from "@/hooks/use-mobile";
 
-const FALLBACK_VERSE_PER_NAIRA = 1.2;
-const POLYGON_CHAIN_ID = 137;
-const VERSE_CONTRACT = "0xc708d6f2153933daa50b2d0758955be0a93a8fec";
-const RECIPIENT_ADDRESS = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7";
-
-interface AirtimeModalProps {
-  product: Product | null;
-  open: boolean;
-  onClose: () => void;
-}
-
+// ── Data plans ───────────────────────────────────────────────────────────────
 type PurchaseType = "airtime" | "data";
-
 type DataPlanCategory = "daily" | "weekly" | "monthly";
-
 type DataPlan = {
   id: string;
   category: DataPlanCategory;
@@ -94,11 +138,8 @@ type DataPlan = {
   validity: string;
 };
 
-type TxStatus = "idle" | "sending" | "confirming" | "verifying" | "completed" | "failed";
-
 const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
   MTN: [
-    // Daily
     { id: "d1",  category: "daily", label: "110MB — 1 Day",                 dataValue: "110MB",               price: 100,   validity: "1 day" },
     { id: "d2",  category: "daily", label: "230MB — 1 Day",                 dataValue: "230MB",               price: 200,   validity: "1 day" },
     { id: "d3",  category: "daily", label: "500MB — 1 Day",                 dataValue: "500MB",               price: 350,   validity: "1 day" },
@@ -111,7 +152,6 @@ const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
     { id: "d10", category: "daily", label: "3.5GB — 1 Day",                 dataValue: "3.5GB",               price: 1000,  validity: "1 day" },
     { id: "d11", category: "daily", label: "4GB — 2 Days",                  dataValue: "4GB",                 price: 1200,  validity: "2 days" },
     { id: "d12", category: "daily", label: "5.5GB — 2 Days",                dataValue: "5.5GB",               price: 1500,  validity: "2 days" },
-    // Weekly
     { id: "w1",  category: "weekly", label: "600MB Xtra — 7 Days",          dataValue: "600MB Xtra Bundle",   price: 500,   validity: "7 days" },
     { id: "w2",  category: "weekly", label: "500MB + 1GB YouTube — 7 Days", dataValue: "500MB + 1GB YouTube", price: 500,   validity: "7 days" },
     { id: "w3",  category: "weekly", label: "600MB + 2 Mins — 7 Days",      dataValue: "600MB + 2 Mins",      price: 500,   validity: "7 days" },
@@ -126,7 +166,6 @@ const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
     { id: "w12", category: "weekly", label: "18GB — 14 Days",               dataValue: "18GB",                price: 6000,  validity: "14 days" },
     { id: "w13", category: "weekly", label: "28GB — 14 Days",               dataValue: "28GB",                price: 8000,  validity: "14 days" },
     { id: "w14", category: "weekly", label: "40GB — 14 Days",               dataValue: "40GB",                price: 10000, validity: "14 days" },
-    // Monthly
     { id: "m1",  category: "monthly", label: "2GB + 2 Mins — 30 Days",      dataValue: "2GB + 2 Mins",        price: 1500,  validity: "30 days" },
     { id: "m2",  category: "monthly", label: "2.7GB + 2 Mins — 30 Days",    dataValue: "2.7GB + 2 Mins",      price: 2000,  validity: "30 days" },
     { id: "m3",  category: "monthly", label: "3.5GB + 5 Mins — 30 Days",    dataValue: "3.5GB + 5 Mins",      price: 2500,  validity: "30 days" },
@@ -146,7 +185,6 @@ const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
     { id: "m17", category: "monthly", label: "150GB — 60 Days",             dataValue: "150GB",               price: 40000, validity: "60 days" },
   ],
   Airtel: [
-    // Daily
     { id: "ad1",  category: "daily", label: "75MB — 1 Day",                      dataValue: "75MB",                     price: 75,    validity: "1 day" },
     { id: "ad2",  category: "daily", label: "110MB — 1 Day",                     dataValue: "110MB",                    price: 100,   validity: "1 day" },
     { id: "ad3",  category: "daily", label: "250MB Night Plan (12–5am) — 1 Day", dataValue: "250MB (12am–5am)",         price: 100,   validity: "1 day" },
@@ -157,7 +195,6 @@ const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
     { id: "ad8",  category: "daily", label: "3GB — 2 Days",                      dataValue: "3GB",                      price: 750,   validity: "2 days" },
     { id: "ad9",  category: "daily", label: "4GB — 2 Days",                      dataValue: "4GB",                      price: 1000,  validity: "2 days" },
     { id: "ad10", category: "daily", label: "6GB — 1 Day",                       dataValue: "6GB",                      price: 1500,  validity: "1 day" },
-    // Weekly
     { id: "aw1",  category: "weekly", label: "1GB — 7 Days",                     dataValue: "1GB",                      price: 800,   validity: "7 days" },
     { id: "aw2",  category: "weekly", label: "1.5GB — 7 Days",                   dataValue: "1.5GB",                    price: 1000,  validity: "7 days" },
     { id: "aw3",  category: "weekly", label: "4GB — 7 Days",                     dataValue: "4GB",                      price: 1500,  validity: "7 days" },
@@ -165,7 +202,6 @@ const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
     { id: "aw5",  category: "weekly", label: "8GB — 7 Days",                     dataValue: "8GB",                      price: 2500,  validity: "7 days" },
     { id: "aw6",  category: "weekly", label: "10GB — 7 Days",                    dataValue: "10GB",                     price: 3000,  validity: "7 days" },
     { id: "aw7",  category: "weekly", label: "20GB — 7 Days",                    dataValue: "20GB",                     price: 5000,  validity: "7 days" },
-    // Monthly
     { id: "am1",  category: "monthly", label: "2GB — 30 Days",                   dataValue: "2GB",                      price: 1500,  validity: "30 days" },
     { id: "am2",  category: "monthly", label: "3GB — 30 Days",                   dataValue: "3GB",                      price: 2000,  validity: "30 days" },
     { id: "am3",  category: "monthly", label: "4GB — 30 Days",                   dataValue: "4GB",                      price: 2500,  validity: "30 days" },
@@ -181,7 +217,6 @@ const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
     { id: "am13", category: "monthly", label: "210GB — 30 Days",                 dataValue: "210GB",                    price: 40000, validity: "30 days" },
   ],
   Glo: [
-    // Daily
     { id: "gd1",  category: "daily", label: "45MB — 1 Day",                              dataValue: "45MB",                              price: 50,    validity: "1 day" },
     { id: "gd2",  category: "daily", label: "135MB Social Bundle — 3 Nights",            dataValue: "135MB Social Bundle",               price: 50,    validity: "3 nights" },
     { id: "gd3",  category: "daily", label: "350MB Night Plan — 1 Night",                dataValue: "350MB Night Plan",                  price: 60,    validity: "1 night" },
@@ -197,14 +232,12 @@ const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
     { id: "gd13", category: "daily", label: "1.8GB Social Bundle — 15 Nights",           dataValue: "1.8GB Social Bundle",               price: 500,   validity: "15 nights" },
     { id: "gd14", category: "daily", label: "3.55GB — 2 Days",                           dataValue: "3.55GB",                            price: 600,   validity: "2 days" },
     { id: "gd15", category: "daily", label: "5.1GB Special — 2 Days",                    dataValue: "5.1GB",                             price: 1000,  validity: "2 days" },
-    // Weekly
     { id: "gw1",  category: "weekly", label: "335MB Social Bundle — 7 Nights",           dataValue: "335MB Social Bundle",               price: 100,   validity: "7 nights" },
     { id: "gw2",  category: "weekly", label: "1.55GB — 7 Days (550MB + 1GB Night)",      dataValue: "550MB + 1GB Night",                 price: 500,   validity: "7 days" },
     { id: "gw3",  category: "weekly", label: "2.1GB Campus Booster — 7 Days",            dataValue: "1.1GB + 1GB Night",                 price: 500,   validity: "7 days" },
     { id: "gw4",  category: "weekly", label: "3.7GB — 7 Days (1.7GB + 2GB Night)",       dataValue: "1.7GB + 2GB Night",                 price: 1000,  validity: "7 days" },
     { id: "gw5",  category: "weekly", label: "6GB Special — 7 Days (4GB + 2GB Night)",   dataValue: "4GB + 2GB Night",                   price: 1500,  validity: "7 days" },
     { id: "gw6",  category: "weekly", label: "9GB — 7 Days (6.5GB + 2.5GB Night)",       dataValue: "6.5GB + 2.5GB Night",               price: 2000,  validity: "7 days" },
-    // Monthly
     { id: "gm1",  category: "monthly", label: "4.2GB Campus Booster — 30 Days",          dataValue: "2.2GB + 2GB Night",                 price: 1000,  validity: "30 days" },
     { id: "gm2",  category: "monthly", label: "5.2GB — 30 Days (2.2GB + 3GB Night)",     dataValue: "2.2GB + 3GB Night",                 price: 1500,  validity: "30 days" },
     { id: "gm3",  category: "monthly", label: "6.25GB — 30 Days (3.25GB + 3GB Night)",   dataValue: "3.25GB + 3GB Night",                price: 2000,  validity: "30 days" },
@@ -216,14 +249,11 @@ const NETWORK_DATA_PLANS: Record<string, DataPlan[]> = {
     { id: "gm9",  category: "monthly", label: "42GB — 30 Days (38GB + 4GB Night)",       dataValue: "38GB + 4GB Night",                  price: 10000, validity: "30 days" },
   ],
   "T2 Mobile": [
-    // Daily
     { id: "td1", category: "daily", label: "40MB — 1 Day",       dataValue: "40MB",    price: 50,    validity: "1 day" },
     { id: "td2", category: "daily", label: "83MB — 1 Day",       dataValue: "83MB",    price: 100,   validity: "1 day" },
     { id: "td3", category: "daily", label: "150MB — 1 Day",      dataValue: "150MB",   price: 200,   validity: "1 day" },
-    // Weekly
     { id: "tw1", category: "weekly", label: "650MB — 7 Days",    dataValue: "650MB",   price: 500,   validity: "7 days" },
     { id: "tw2", category: "weekly", label: "3.4GB — 7 Days",    dataValue: "3.4GB",   price: 1500,  validity: "7 days" },
-    // Monthly
     { id: "tm1",  category: "monthly", label: "2GB — 30 Days",   dataValue: "2GB",     price: 1000,  validity: "30 days" },
     { id: "tm2",  category: "monthly", label: "2.3GB — 30 Days", dataValue: "2.3GB",   price: 1200,  validity: "30 days" },
     { id: "tm3",  category: "monthly", label: "4.5GB — 30 Days", dataValue: "4.5GB",   price: 2000,  validity: "30 days" },
@@ -244,7 +274,18 @@ const CATEGORY_LABELS: Record<DataPlanCategory, string> = {
   monthly: "Monthly Plans",
 };
 
+// ── Props ────────────────────────────────────────────────────────────────────
+interface AirtimeModalProps {
+  product: Product | null;
+  open: boolean;
+  onClose: () => void;
+}
+
+type TxStatus = "idle" | "sending" | "confirming" | "verifying" | "completed" | "failed";
+
+// ── Component ────────────────────────────────────────────────────────────────
 export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
+  const [paymentToken, setPaymentToken] = useState<PaymentToken>("VERSE");
   const [purchaseType, setPurchaseType] = useState<PurchaseType>("airtime");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [amount, setAmount] = useState("");
@@ -254,32 +295,30 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
   const [confirmResult, setConfirmResult] = useState<{ explorerUrl: string; emailSent: boolean } | null>(null);
-  const [manualTxHash, setManualTxHash] = useState("");
   const [copied, setCopied] = useState(false);
   const [showFinalize, setShowFinalize] = useState(false);
 
   const isMobile = useIsMobile();
   const { address, chainId, isConnected, isConnecting, connect } = useWallet();
+  const solanaWallet = useSolanaWallet();
   const dataPlans = NETWORK_DATA_PLANS[product?.name ?? ""] ?? [];
   const selectedPlan = dataPlans.find((p) => p.id === selectedPlanId);
 
   const { writeContract, isPending: isSending } = useWriteContract();
   const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({
-    hash: txHash ? (txHash as `0x${string}`) : undefined,
+    hash: txHash && (paymentToken === "VERSE" || paymentToken === "USDT_POLYGON") ? (txHash as `0x${string}`) : undefined,
   });
 
-  const { data: rateData, isLoading: rateLoading, isError: rateError } = useVerseNairaRate(open);
+  const { data: ratesData, isLoading: rateLoading, isError: rateError } = useAllRates(open);
 
   const isOnPolygon = chainId === POLYGON_CHAIN_ID;
 
-  const verifyBalanceParams = isConnected && isOnPolygon && address
-    ? { walletAddress: address }
-    : undefined;
-
-  const { data: eligibilityData, isLoading: isVerifying } = useVerseBalance(verifyBalanceParams?.walletAddress);
+  const verifyBalanceAddress = isConnected && isOnPolygon && address && paymentToken === "VERSE" ? address : undefined;
+  const { data: eligibilityData, isLoading: isVerifying } = useVerseBalance(verifyBalanceAddress);
 
   const { mutate: confirmPurchase, data: confirmData, isPending: isConfirmingBackend, error: confirmError } = useConfirmPurchase();
 
+  // ── Resets ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (open) {
       setPurchaseType("airtime");
@@ -290,8 +329,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       setTxHash(null);
       setTxError(null);
       setConfirmResult(null);
-      setManualTxHash("");
       setCopied(false);
+      setShowFinalize(false);
     }
   }, [open]);
 
@@ -307,15 +346,21 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     }
   }, [purchaseType]);
 
-  // Monitor chain confirmation
+  // Reset tx state when switching tokens
+  useEffect(() => {
+    setTxStatus("idle");
+    setTxHash(null);
+    setTxError(null);
+    setConfirmResult(null);
+  }, [paymentToken]);
+
+  // Monitor chain confirmation (EVM tokens)
   useEffect(() => {
     if (receipt && txHash && txStatus === "confirming") {
       if (receipt.status === "success") {
         setTxStatus("verifying");
         const naira = parseFloat(amount) || 0;
-        const verseRaw = naira * (rateData?.versePerNairaWithFee ?? FALLBACK_VERSE_PER_NAIRA);
-        const verseStr = verseRaw.toLocaleString(undefined, { maximumFractionDigits: 18 });
-
+        const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 18, useGrouping: false });
         confirmPurchase({
           data: {
             txHash,
@@ -323,10 +368,11 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             purchaseType,
             phoneNumber,
             nairaAmount: naira,
-            verseAmount: verseStr,
+            verseAmount: tokenAmountStr,
             network: product?.name ?? "N/A",
             dataPlan: selectedPlan?.label ?? undefined,
-            txUrl: `https://polygonscan.com/tx/${txHash}`,
+            txUrl: EXPLORER_FOR_TOKEN[paymentToken](txHash),
+            paymentToken,
           },
         });
       } else {
@@ -340,128 +386,421 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   useEffect(() => {
     if (confirmData && txStatus === "verifying") {
       setTxStatus("completed");
-      setConfirmResult({
-        explorerUrl: confirmData.explorerUrl,
-        emailSent: confirmData.emailSent,
-      });
+      setConfirmResult({ explorerUrl: confirmData.explorerUrl, emailSent: confirmData.emailSent });
     }
   }, [confirmData]);
 
+  // Handle backend verification failure
+  useEffect(() => {
+    if (confirmError && txStatus === "verifying") {
+      setTxStatus("failed");
+      setTxError(confirmError);
+    }
+  }, [confirmError, txStatus]);
+
   if (!product) return null;
 
+  // ── Derived values ─────────────────────────────────────────────────────────
   const nairaAmount = parseFloat(amount) || 0;
-  const verseAmount = nairaAmount * (rateData?.versePerNairaWithFee ?? FALLBACK_VERSE_PER_NAIRA);
-  const baseRate = rateData?.versePerNaira ?? FALLBACK_VERSE_PER_NAIRA;
-  const feePercent = rateData?.feePercent;
+  const rateKey = { VERSE: "verse", USDT_POLYGON: "usdt", SOL: "sol", ECASH: "ecash" } as const;
+  const currentRate = ratesData?.[rateKey[paymentToken]]?.tokenPerNaira ?? FALLBACK_RATES[paymentToken];
+  const feePercent = ratesData?.[rateKey[paymentToken]]?.feePercent ?? 2;
+  const tokenAmount = nairaAmount * currentRate;
+  const tokenSymbol = TOKEN_SYMBOLS[paymentToken];
+  const recipientAddress = RECIPIENT_FOR_TOKEN[paymentToken];
 
   const isFormValid = phoneNumber.length >= 10 && nairaAmount >= 100;
-  const isEligible = eligibilityData?.eligible === true;
+  const isEligible = paymentToken === "VERSE" ? eligibilityData?.eligible === true : true;
   const isBusy = txStatus !== "idle" && txStatus !== "completed" && txStatus !== "failed";
   const isCompleted = txStatus === "completed";
   const isFailed = txStatus === "failed";
 
-  const handleSpend = async () => {
-    if (!address || !isOnPolygon) return;
-    setTxError(null);
-    setTxStatus("sending");
-    setConfirmResult(null);
-
-    try {
-      const verseAmountStr = verseAmount.toLocaleString(undefined, {
-        maximumFractionDigits: 18,
-        useGrouping: false,
-      });
-      const rawAmount = parseUnits(verseAmountStr, 18);
-
-      writeContract(
-        {
-          address: VERSE_CONTRACT,
-          abi: erc20Abi,
-          functionName: "transfer",
-          args: [RECIPIENT_ADDRESS, rawAmount],
-        },
-        {
-          onSuccess: (hash) => {
-            setTxHash(hash);
-            setTxStatus("confirming");
-          },
-          onError: (err) => {
-            setTxStatus("failed");
-            setTxError(err.message || "Transaction failed to submit");
-          },
-        },
-      );
-    } catch (err) {
-      setTxStatus("failed");
-      setTxError(err instanceof Error ? err.message : "Failed to prepare transaction");
-    }
-  };
-
-  async function handleSwitchToPolygon() {
-    if (!window.ethereum) return;
-    try {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x89" }],
-      });
-    } catch (switchErr: unknown) {
-      const err = switchErr as { code?: number };
-      if (err?.code === 4902) {
-        try {
-          await window.ethereum.request({
-            method: "wallet_addEthereumChain",
-            params: [
-              {
-                chainId: "0x89",
-                chainName: "Polygon Mainnet",
-                nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
-                rpcUrls: ["https://rpc.ankr.com/polygon"],
-                blockExplorerUrls: ["https://polygonscan.com"],
-              },
-            ],
-          });
-        } catch {
-          // ignore
-        }
-      }
-    }
-  }
+  // Show QR for: mobile (all tokens), desktop eCash, or desktop SOL with no injected wallet
+  const showQRFlow = isMobile || paymentToken === "ECASH" || (paymentToken === "SOL" && !solanaWallet.hasProvider);
 
   const shortAddress = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
-
   const balanceShortfall =
     eligibilityData && !eligibilityData.eligible
       ? (parseFloat(eligibilityData.required) - parseFloat(eligibilityData.balance)).toLocaleString(undefined, { maximumFractionDigits: 2 })
       : null;
 
+  // ── Handlers ───────────────────────────────────────────────────────────────
+  async function handleSwitchToPolygon() {
+    const eth = (window as unknown as { ethereum?: { request(args: { method: string; params?: unknown[] }): Promise<unknown> } }).ethereum;
+    if (!eth) return;
+    try {
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x89" }] });
+    } catch (switchErr: unknown) {
+      const err = switchErr as { code?: number };
+      if (err?.code === 4902) {
+        try {
+          await eth.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: "0x89",
+              chainName: "Polygon Mainnet",
+              nativeCurrency: { name: "MATIC", symbol: "MATIC", decimals: 18 },
+              rpcUrls: ["https://rpc.ankr.com/polygon"],
+              blockExplorerUrls: ["https://polygonscan.com"],
+            }],
+          });
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
+  function handleEVMSpend() {
+    if (!address || !isOnPolygon) return;
+    setTxError(null);
+    setTxStatus("sending");
+    setConfirmResult(null);
+
+    const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 18, useGrouping: false });
+
+    if (paymentToken === "VERSE") {
+      const rawAmount = parseUnits(tokenAmountStr, 18);
+      writeContract(
+        { address: VERSE_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [POLYGON_RECIPIENT, rawAmount] },
+        {
+          onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); },
+          onError: (err) => { setTxStatus("failed"); setTxError(err.message || "Transaction failed to submit"); },
+        },
+      );
+    } else if (paymentToken === "USDT_POLYGON") {
+      const rawAmount = parseUnits(tokenAmountStr, 6);
+      writeContract(
+        { address: USDT_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [POLYGON_RECIPIENT, rawAmount] },
+        {
+          onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); },
+          onError: (err) => { setTxStatus("failed"); setTxError(err.message || "Transaction failed to submit"); },
+        },
+      );
+    }
+  }
+
+  async function handleSolSpend() {
+    setTxError(null);
+    setTxStatus("sending");
+    setConfirmResult(null);
+    try {
+      const sig = await solanaWallet.sendSol(SOL_RECIPIENT, tokenAmount);
+      setTxHash(sig);
+      setTxStatus("confirming");
+      await solanaWallet.confirmTx(sig);
+      setTxStatus("verifying");
+      const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 9, useGrouping: false });
+      confirmPurchase({
+        data: {
+          txHash: sig,
+          walletAddress: solanaWallet.publicKey ?? undefined,
+          purchaseType,
+          phoneNumber,
+          nairaAmount,
+          verseAmount: tokenAmountStr,
+          network: product?.name ?? "N/A",
+          dataPlan: selectedPlan?.label ?? undefined,
+          txUrl: EXPLORER_FOR_TOKEN.SOL(sig),
+          paymentToken: "SOL",
+        },
+      });
+    } catch (err) {
+      setTxStatus("failed");
+      setTxError(err instanceof Error ? err.message : "SOL transfer failed");
+    }
+  }
+
+  function handleFinalizeConfirm(trimmedHash: string) {
+    setTxError(null);
+    setTxHash(trimmedHash);
+    setTxStatus("verifying");
+    setConfirmResult(null);
+    const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 18, useGrouping: false });
+    confirmPurchase({
+      data: {
+        txHash: trimmedHash,
+        walletAddress: paymentToken === "SOL" ? (solanaWallet.publicKey ?? undefined) : (address ?? undefined),
+        purchaseType,
+        phoneNumber,
+        nairaAmount,
+        verseAmount: tokenAmountStr,
+        network: product?.name ?? "N/A",
+        dataPlan: selectedPlan?.label ?? undefined,
+        txUrl: EXPLORER_FOR_TOKEN[paymentToken](trimmedHash),
+        paymentToken,
+      },
+    });
+  }
+
+  // ── Wallet section renderer ────────────────────────────────────────────────
+  function renderWalletSection() {
+    if (showQRFlow) {
+      const payLabel =
+        paymentToken === "VERSE" ? "Pay with VERSE (Polygon)" :
+        paymentToken === "USDT_POLYGON" ? "Pay with USDT (Polygon)" :
+        paymentToken === "SOL" ? "Pay with SOL (Solana)" :
+        "Pay with eCash (XEC)";
+      return (
+        <>
+          <div className="flex items-center gap-2">
+            <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              {payLabel}
+            </span>
+          </div>
+          <div className="flex flex-col items-center gap-2 w-full">
+            <div className="bg-white p-1.5 rounded-lg max-w-full">
+              <QRCodeSVG value={recipientAddress} size={120} level="M" includeMargin={false} className="max-w-full h-auto" />
+            </div>
+            <div className="flex items-center gap-2 w-full min-w-0">
+              <code className="flex-1 min-w-0 text-[10px] text-muted-foreground font-mono truncate bg-black/20 rounded px-2 py-1">
+                {recipientAddress}
+              </code>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-[10px] text-[#06B6D4] hover:text-[#06B6D4] hover:bg-[#06B6D4]/10 shrink-0"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(recipientAddress);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground text-center">
+              {paymentToken === "VERSE" && tokenAmount > 0
+                ? `Scan or copy the address, then send ${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} VERSE on Polygon`
+                : paymentToken === "USDT_POLYGON" && tokenAmount > 0
+                ? `Scan or copy the address, then send ${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} USDT on Polygon`
+                : paymentToken === "SOL" && tokenAmount > 0
+                ? `Scan or copy the address, then send ${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL on Solana`
+                : paymentToken === "ECASH" && tokenAmount > 0
+                ? `Scan or copy the address, then send ${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} XEC`
+                : "Scan or copy the address to send payment"}
+            </p>
+          </div>
+        </>
+      );
+    }
+
+    // Desktop EVM flow (VERSE / USDT)
+    if (paymentToken === "VERSE" || paymentToken === "USDT_POLYGON") {
+      return (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Wallet (Polygon)</span>
+            </div>
+            {isConnected && <span className="text-[10px] text-muted-foreground font-mono">{shortAddress}</span>}
+          </div>
+          {!isConnected ? (
+            <Button
+              size="sm" variant="outline"
+              className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
+              onClick={connect} disabled={isConnecting || isBusy}
+            >
+              {isConnecting
+                ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Connecting…</>
+                : <><Wallet className="h-3 w-3 mr-1.5" />Connect Wallet</>}
+            </Button>
+          ) : !isOnPolygon ? (
+            <Button
+              size="sm" variant="outline"
+              className="w-full h-8 text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:text-amber-400"
+              onClick={handleSwitchToPolygon} disabled={isBusy}
+            >
+              <AlertTriangle className="h-3 w-3 mr-1.5" />Switch to Polygon
+            </Button>
+          ) : paymentToken === "VERSE" && isVerifying ? (
+            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />Checking VERSE balance…
+            </div>
+          ) : paymentToken === "VERSE" && eligibilityData ? (
+            isEligible ? (
+              <div className="flex items-center gap-1.5 text-[11px] text-[#06B6D4]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#06B6D4] shrink-0" />
+                {parseFloat(eligibilityData.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })} VERSE — eligible to spend
+              </div>
+            ) : (
+              <div className="flex items-start gap-1.5 text-[11px] text-amber-400">
+                <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                <span>
+                  You need at least 2,000 VERSE on Polygon to spend.{" "}
+                  {balanceShortfall && <span className="text-amber-400/70">({balanceShortfall} VERSE short)</span>}
+                </span>
+              </div>
+            )
+          ) : (
+            <div className="text-[11px] text-[#06B6D4] flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#06B6D4] shrink-0" />
+              Connected to Polygon
+            </div>
+          )}
+        </>
+      );
+    }
+
+    // Desktop SOL flow
+    if (paymentToken === "SOL") {
+      return (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Wallet (Solana)</span>
+            </div>
+            {solanaWallet.isConnected && solanaWallet.publicKey && (
+              <span className="text-[10px] text-muted-foreground font-mono">
+                {solanaWallet.publicKey.slice(0, 4)}…{solanaWallet.publicKey.slice(-4)}
+              </span>
+            )}
+          </div>
+          {!solanaWallet.hasProvider ? (
+            <Button
+              size="sm" variant="outline"
+              className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
+              onClick={() => window.open("https://phantom.app/", "_blank")}
+            >
+              <Wallet className="h-3 w-3 mr-1.5" />Install Phantom / Solflare
+            </Button>
+          ) : !solanaWallet.isConnected ? (
+            <Button
+              size="sm" variant="outline"
+              className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
+              onClick={solanaWallet.connect} disabled={solanaWallet.isConnecting || isBusy}
+            >
+              {solanaWallet.isConnecting
+                ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Connecting…</>
+                : <><Wallet className="h-3 w-3 mr-1.5" />Connect Solana Wallet</>}
+            </Button>
+          ) : (
+            <div className="text-[11px] text-[#06B6D4] flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#06B6D4] shrink-0" />
+              Solana wallet connected
+            </div>
+          )}
+        </>
+      );
+    }
+
+    return null;
+  }
+
+  // ── Spend button renderer ──────────────────────────────────────────────────
+  function renderSpendButton() {
+    if (showQRFlow) {
+      return (
+        <Button
+          className="w-full bg-[#06B6D4] text-black border-0 font-semibold h-11 hover:bg-[#0891B2]"
+          disabled={!isFormValid || isBusy}
+          onClick={() => { if (isFormValid) setShowFinalize(true); }}
+        >
+          <CheckCircle2 className="h-4 w-4 mr-1.5" />Confirm Purchase
+        </Button>
+      );
+    }
+
+    if (paymentToken === "VERSE") {
+      const canSpend = isFormValid && isConnected && isOnPolygon && !isVerifying && isEligible;
+      return (
+        <>
+          <Button
+            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            disabled={!canSpend || isBusy}
+            onClick={handleEVMSpend}
+          >
+            {isSending ? <><Loader2 className="h-4 w-4 animate-spin" />Awaiting wallet…</>
+              : isConfirming ? <><Loader2 className="h-4 w-4 animate-spin" />Confirming…</>
+              : isConfirmingBackend ? <><Loader2 className="h-4 w-4 animate-spin" />Verifying…</>
+              : isCompleted ? <><CheckCircle2 className="h-4 w-4 mr-1.5" />Confirmed</>
+              : <><Wallet className="h-4 w-4 mr-1.5" />Spend {tokenAmount > 0 ? `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} VERSE` : ""}</>}
+          </Button>
+          {isConnected && isOnPolygon && eligibilityData && !isEligible && (
+            <p className="text-[11px] text-amber-400/80 text-center">You need at least 2,000 VERSE on Polygon to spend</p>
+          )}
+          {isConnected && !isOnPolygon && (
+            <p className="text-[11px] text-amber-400/80 text-center">Switch your wallet to Polygon network to continue</p>
+          )}
+          {!isConnected && (
+            <p className="text-[11px] text-muted-foreground text-center">Connect your wallet to enable spending</p>
+          )}
+        </>
+      );
+    }
+
+    if (paymentToken === "USDT_POLYGON") {
+      const canSpend = isFormValid && isConnected && isOnPolygon;
+      return (
+        <>
+          <Button
+            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            disabled={!canSpend || isBusy}
+            onClick={handleEVMSpend}
+          >
+            {isSending ? <><Loader2 className="h-4 w-4 animate-spin" />Awaiting wallet…</>
+              : isConfirming ? <><Loader2 className="h-4 w-4 animate-spin" />Confirming…</>
+              : isConfirmingBackend ? <><Loader2 className="h-4 w-4 animate-spin" />Verifying…</>
+              : isCompleted ? <><CheckCircle2 className="h-4 w-4 mr-1.5" />Confirmed</>
+              : <><Wallet className="h-4 w-4 mr-1.5" />Spend {tokenAmount > 0 ? `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} USDT` : ""}</>}
+          </Button>
+          {isConnected && !isOnPolygon && (
+            <p className="text-[11px] text-amber-400/80 text-center">Switch your wallet to Polygon network to continue</p>
+          )}
+          {!isConnected && (
+            <p className="text-[11px] text-muted-foreground text-center">Connect your wallet to enable spending</p>
+          )}
+        </>
+      );
+    }
+
+    if (paymentToken === "SOL") {
+      const canSpend = isFormValid && solanaWallet.isConnected;
+      return (
+        <>
+          <Button
+            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            disabled={!canSpend || isBusy}
+            onClick={handleSolSpend}
+          >
+            {txStatus === "sending" ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />Awaiting wallet…</>
+              : txStatus === "confirming" ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />Confirming on Solana…</>
+              : isConfirmingBackend ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />Verifying…</>
+              : isCompleted ? <><CheckCircle2 className="h-4 w-4 mr-1.5" />Confirmed</>
+              : <><Wallet className="h-4 w-4 mr-1.5" />Spend {tokenAmount > 0 ? `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL` : ""}</>}
+          </Button>
+          {!solanaWallet.isConnected && solanaWallet.hasProvider && (
+            <p className="text-[11px] text-muted-foreground text-center">Connect your Solana wallet to enable spending</p>
+          )}
+        </>
+      );
+    }
+
+    return null;
+  }
+
+  // ── JSX ────────────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-[700px] border-white/5 bg-card/95 backdrop-blur-xl p-0 !rounded-xl shadow-2xl shadow-black/50">
-        {/* ─── Desktop: horizontal row | Mobile: vertical stack ─── */}
         <div className="flex flex-col sm:flex-row">
           {/* Product preview image — desktop only */}
           <div className="hidden sm:block relative sm:w-[45%] sm:shrink-0 overflow-hidden">
             <div className="aspect-[4/3] sm:aspect-auto sm:min-h-[280px] sm:h-full relative">
-              <img
-                src={product.thumbnail}
-                alt={product.name}
-                className="w-full h-full object-cover sm:rounded-l-xl"
-              />
+              <img src={product.thumbnail} alt={product.name} className="w-full h-full object-cover sm:rounded-l-xl" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent sm:bg-gradient-to-r sm:from-transparent sm:via-black/10 sm:to-black/60" />
               <div className="absolute bottom-3 left-3 right-3">
-                <Badge className="bg-[#06B6D4]/30 text-[#06B6D4] border-[#06B6D4]/30 text-[10px] px-2 py-0.5">
-                  Airtime / Data
-                </Badge>
+                <Badge className="bg-[#06B6D4]/30 text-[#06B6D4] border-[#06B6D4]/30 text-[10px] px-2 py-0.5">Airtime / Data</Badge>
                 <h3 className="text-white font-bold text-sm mt-1">{product.name}</h3>
               </div>
             </div>
           </div>
 
-          {/* Mobile header — title + tag only (no image) */}
+          {/* Mobile header */}
           <div className="sm:hidden px-3 pt-3 pb-0">
-            <Badge className="bg-[#06B6D4]/30 text-[#06B6D4] border-[#06B6D4]/30 text-[10px] px-2 py-0.5">
-              Airtime / Data
-            </Badge>
+            <Badge className="bg-[#06B6D4]/30 text-[#06B6D4] border-[#06B6D4]/30 text-[10px] px-2 py-0.5">Airtime / Data</Badge>
             <h3 className="text-white font-bold text-sm mt-1">{product.name}</h3>
           </div>
 
@@ -469,136 +808,42 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
           <div className="p-3 sm:p-4 space-y-3 sm:w-[55%]">
             <DialogHeader className="text-left space-y-0">
               <DialogTitle className="text-base font-bold sr-only">Top Up</DialogTitle>
-              <DialogDescription className="sr-only">
-                Enter your phone number and amount to purchase airtime or data
-              </DialogDescription>
+              <DialogDescription className="sr-only">Enter your phone number and amount to purchase airtime or data</DialogDescription>
             </DialogHeader>
 
-            {/* Wallet connection gate (desktop only) / QR code (mobile only) */}
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 space-y-2">
-              {isMobile ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
-                    <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                      Pay with Verse
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-center gap-2 w-full">
-                    <div className="bg-white p-1.5 rounded-lg max-w-full">
-                      <QRCodeSVG
-                        value={RECIPIENT_ADDRESS}
-                        size={120}
-                        level="M"
-                        includeMargin={false}
-                        className="max-w-full h-auto"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 w-full min-w-0">
-                      <code className="flex-1 min-w-0 text-[10px] text-muted-foreground font-mono truncate bg-black/20 rounded px-2 py-1">
-                        {RECIPIENT_ADDRESS}
-                      </code>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-[10px] text-[#06B6D4] hover:text-[#06B6D4] hover:bg-[#06B6D4]/10 shrink-0"
-                        onClick={async () => {
-                          await navigator.clipboard.writeText(RECIPIENT_ADDRESS);
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
-                        }}
-                      >
-                        {copied ? (
-                          <Check className="h-3 w-3" />
-                        ) : (
-                          <Copy className="h-3 w-3" />
-                        )}
-                        {copied ? "Copied" : "Copy"}
-                      </Button>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground text-center">
-                      Scan or copy the address, then send {verseAmount > 0 ? verseAmount.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "Verse"} on Polygon
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
-                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        Wallet
-                      </span>
-                    </div>
-                    {isConnected && (
-                      <span className="text-[10px] text-muted-foreground font-mono">{shortAddress}</span>
-                    )}
-                  </div>
-
-                  {!isConnected ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
-                      onClick={connect}
-                      disabled={isConnecting || isBusy}
-                    >
-                      {isConnecting ? (
-                        <>
-                          <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
-                          Connecting…
-                        </>
-                      ) : (
-                        <>
-                          <Wallet className="h-3 w-3 mr-1.5" />
-                          Connect Wallet
-                        </>
-                      )}
-                    </Button>
-                  ) : !isOnPolygon ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full h-8 text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:text-amber-400"
-                      onClick={handleSwitchToPolygon}
-                      disabled={isBusy}
-                    >
-                      <AlertTriangle className="h-3 w-3 mr-1.5" />
-                      Switch to Polygon
-                    </Button>
-                  ) : isVerifying ? (
-                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Checking VERSE balance…
-                    </div>
-                  ) : eligibilityData ? (
-                    isEligible ? (
-                      <div className="flex items-center gap-1.5 text-[11px] text-[#06B6D4]">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#06B6D4] shrink-0" />
-                        {parseFloat(eligibilityData.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })} VERSE — eligible to spend
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-1.5 text-[11px] text-amber-400">
-                        <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
-                        <span>
-                          You need at least 2,000 VERSE on Polygon to spend.{" "}
-                          {balanceShortfall && (
-                            <span className="text-amber-400/70">({balanceShortfall} VERSE short)</span>
-                          )}
-                        </span>
-                      </div>
-                    )
-                  ) : (
-                    <div className="text-[11px] text-[#06B6D4] flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#06B6D4] shrink-0" />
-                      Connected to Polygon
-                    </div>
-                  )}
-                </>
-              )}
+            {/* ── Payment token selector ──────────────────────────────── */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Pay with</label>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(["VERSE", "USDT_POLYGON", "SOL", "ECASH"] as PaymentToken[]).map((token) => (
+                  <button
+                    key={token}
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => !isBusy && setPaymentToken(token)}
+                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-[10px] font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
+                      paymentToken === token
+                        ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
+                        : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground hover:border-white/20"
+                    }`}
+                    style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                  >
+                    <span className="text-[11px] font-bold">{TOKEN_SYMBOLS[token]}</span>
+                    {token === "USDT_POLYGON" && <span className="text-[8px] opacity-60">Polygon</span>}
+                    {token === "SOL" && <span className="text-[8px] opacity-60">Solana</span>}
+                    {token === "ECASH" && <span className="text-[8px] opacity-60">XEC</span>}
+                    {token === "VERSE" && <span className="text-[8px] opacity-60">Polygon</span>}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Transaction status banner */}
+            {/* ── Wallet / QR section ─────────────────────────────────── */}
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 space-y-2">
+              {renderWalletSection()}
+            </div>
+
+            {/* ── Tx status banner ─────────────────────────────────────── */}
             {isBusy && (
               <div className="rounded-lg border border-[#06B6D4]/20 bg-[#06B6D4]/10 px-3 py-2.5 space-y-1">
                 <div className="flex items-center gap-2">
@@ -610,13 +855,9 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                   </span>
                 </div>
                 {txHash && (
-                  <a
-                    href={`https://polygonscan.com/tx/${txHash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-[#06B6D4]/80 hover:text-[#06B6D4]"
-                  >
-                    View on Polygonscan <ExternalLink className="h-2.5 w-2.5" />
+                  <a href={EXPLORER_FOR_TOKEN[paymentToken](txHash)} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] text-[#06B6D4]/80 hover:text-[#06B6D4]">
+                    View on explorer <ExternalLink className="h-2.5 w-2.5" />
                   </a>
                 )}
               </div>
@@ -625,24 +866,16 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-2.5 space-y-1">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
-                  <span className="text-[11px] font-medium text-[#06B6D4]">
-                    Purchase confirmed!
-                  </span>
+                  <span className="text-[11px] font-medium text-[#06B6D4]">Purchase confirmed!</span>
                 </div>
                 {confirmResult && (
-                  <a
-                    href={confirmResult.explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] text-[#06B6D4]/80 hover:text-[#06B6D4]"
-                  >
-                    View on Polygonscan <ExternalLink className="h-2.5 w-2.5" />
+                  <a href={confirmResult.explorerUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] text-[#06B6D4]/80 hover:text-[#06B6D4]">
+                    View on explorer <ExternalLink className="h-2.5 w-2.5" />
                   </a>
                 )}
                 {confirmResult && !confirmResult.emailSent && (
-                  <p className="text-[10px] text-amber-400/80">
-                    Notification email could not be sent.
-                  </p>
+                  <p className="text-[10px] text-amber-400/80">Notification email could not be sent.</p>
                 )}
               </div>
             )}
@@ -650,49 +883,34 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 space-y-1">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />
-                  <span className="text-[11px] font-medium text-red-400">
-                    Transaction failed
-                  </span>
+                  <span className="text-[11px] font-medium text-red-400">Transaction failed</span>
                 </div>
-                {txError && (
-                  <p className="text-[10px] text-red-400/80">{txError}</p>
-                )}
+                {txError && <p className="text-[10px] text-red-400/80">{txError}</p>}
               </div>
             )}
 
-            {/* Airtime / Data toggle */}
+            {/* ── Airtime / Data toggle ────────────────────────────────── */}
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => !isBusy && setPurchaseType("airtime")}
-                disabled={isBusy}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all border cursor-pointer disabled:opacity-50 ${
-                  purchaseType === "airtime"
-                    ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
-                    : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground"
-                }`}
-                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
-              >
-                <Smartphone className="h-3.5 w-3.5" />
-                Airtime
-              </button>
-              <button
-                type="button"
-                onClick={() => !isBusy && setPurchaseType("data")}
-                disabled={isBusy}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all border cursor-pointer disabled:opacity-50 ${
-                  purchaseType === "data"
-                    ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
-                    : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground"
-                }`}
-                style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
-              >
-                <Signal className="h-3.5 w-3.5" />
-                Data
-              </button>
+              {(["airtime", "data"] as PurchaseType[]).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => !isBusy && setPurchaseType(type)}
+                  disabled={isBusy}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all border cursor-pointer disabled:opacity-50 ${
+                    purchaseType === type
+                      ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
+                      : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                >
+                  {type === "airtime" ? <Smartphone className="h-3.5 w-3.5" /> : <Signal className="h-3.5 w-3.5" />}
+                  {type === "airtime" ? "Airtime" : "Data"}
+                </button>
+              ))}
             </div>
 
-            {/* Phone number */}
+            {/* ── Phone number ─────────────────────────────────────────── */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Phone Number</label>
               <Input
@@ -706,13 +924,11 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               />
             </div>
 
-            {/* Data plan dropdown — only when Data is selected */}
+            {/* ── Data plan dropdown ───────────────────────────────────── */}
             {purchaseType === "data" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Data Plan</label>
-                {/* Inline plan picker — no portal, no z-index conflicts */}
                 <div className="rounded-lg border border-white/15 overflow-hidden" style={{ background: "hsl(240,10%,11%)" }}>
-                  {/* Trigger row */}
                   <button
                     type="button"
                     disabled={isBusy}
@@ -725,7 +941,6 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     </span>
                     <ChevronDown className={`h-4 w-4 opacity-50 shrink-0 ml-2 transition-transform ${isPlanOpen && !selectedPlan ? "rotate-180" : ""}`} />
                   </button>
-                  {/* Inline scrollable list — shown only after user clicks */}
                   {isPlanOpen && !selectedPlan && (
                     <div className="border-t border-white/10 max-h-[220px] overflow-y-auto overscroll-contain" style={{ background: "hsl(240,10%,9%)" }}>
                       {(["daily", "weekly", "monthly"] as DataPlanCategory[])
@@ -735,29 +950,26 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                             <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide sticky top-0" style={{ background: "hsl(240,10%,7%)" }}>
                               {CATEGORY_LABELS[cat]}
                             </div>
-                            {dataPlans
-                              .filter((p) => p.category === cat)
-                              .map((plan) => (
-                                <button
-                                  key={plan.id}
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => { if (!isBusy) { setSelectedPlanId(plan.id); setIsPlanOpen(false); } }}
-                                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#06B6D4]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
-                                  style={{ background: "hsl(240,10%,9%)" }}
-                                >
-                                  <div className="flex flex-col leading-tight min-w-0">
-                                    <span className="text-xs font-medium">{plan.label}</span>
-                                    <span className="text-[10px] text-muted-foreground">{plan.dataValue} · {plan.validity}</span>
-                                  </div>
-                                  <span className="text-xs font-semibold text-[#06B6D4] shrink-0 ml-3">₦{plan.price.toLocaleString()}</span>
-                                </button>
-                              ))}
+                            {dataPlans.filter((p) => p.category === cat).map((plan) => (
+                              <button
+                                key={plan.id}
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => { if (!isBusy) { setSelectedPlanId(plan.id); setIsPlanOpen(false); } }}
+                                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#06B6D4]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
+                                style={{ background: "hsl(240,10%,9%)" }}
+                              >
+                                <div className="flex flex-col leading-tight min-w-0">
+                                  <span className="text-xs font-medium">{plan.label}</span>
+                                  <span className="text-[10px] text-muted-foreground">{plan.dataValue} · {plan.validity}</span>
+                                </div>
+                                <span className="text-xs font-semibold text-[#06B6D4] shrink-0 ml-3">₦{plan.price.toLocaleString()}</span>
+                              </button>
+                            ))}
                           </div>
                         ))}
                     </div>
                   )}
-                  {/* Selected plan — show change link */}
                   {selectedPlan && (
                     <div className="border-t border-white/10 px-3 py-2 flex items-center justify-between bg-[#06B6D4]/10">
                       <div className="flex flex-col leading-tight min-w-0">
@@ -765,8 +977,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                         <span className="text-xs font-semibold text-[#06B6D4]">{selectedPlan.dataValue} · {selectedPlan.validity}</span>
                       </div>
                       <button
-                        type="button"
-                        disabled={isBusy}
+                        type="button" disabled={isBusy}
                         onClick={() => !isBusy && setSelectedPlanId("")}
                         className="text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-3 disabled:opacity-50"
                       >
@@ -778,7 +989,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               </div>
             )}
 
-            {/* Data value display — when data plan is selected */}
+            {/* ── Data value display ───────────────────────────────────── */}
             {purchaseType === "data" && selectedPlan && (
               <div className="flex items-center gap-3 rounded-lg bg-[#06B6D4]/10 border border-[#06B6D4]/20 px-3 py-2.5">
                 <div className="h-8 w-8 rounded-lg bg-[#06B6D4]/20 flex items-center justify-center shrink-0">
@@ -795,7 +1006,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               </div>
             )}
 
-            {/* Amount — editable for airtime, read-only for data */}
+            {/* ── Amount input ─────────────────────────────────────────── */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
                 {purchaseType === "data" && selectedPlan ? "Price (₦)" : "Amount (₦)"}
@@ -804,24 +1015,16 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                 type="number"
                 placeholder={purchaseType === "data" ? "Select a plan" : "1000"}
                 value={amount}
-                onChange={(e) => {
-                  if (!isBusy && purchaseType === "airtime") {
-                    setAmount(e.target.value);
-                  }
-                }}
-                readOnly={purchaseType === "data" && !!selectedPlan || isBusy}
+                onChange={(e) => { if (!isBusy && purchaseType === "airtime") setAmount(e.target.value); }}
+                readOnly={(purchaseType === "data" && !!selectedPlan) || isBusy}
                 min={100}
                 disabled={isBusy}
-                className={`h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50 ${
-                  purchaseType === "data" && selectedPlan ? "opacity-70 cursor-default" : ""
-                }`}
+                className={`h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50 ${purchaseType === "data" && selectedPlan ? "opacity-70 cursor-default" : ""}`}
               />
-              {purchaseType === "airtime" && (
-                <p className="text-[10px] text-muted-foreground">Min: ₦100</p>
-              )}
+              {purchaseType === "airtime" && <p className="text-[10px] text-muted-foreground">Min: ₦100</p>}
             </div>
 
-            {/* Rate info box — always visible */}
+            {/* ── Rate info box ─────────────────────────────────────────── */}
             <div className="rounded-lg bg-[#06B6D4]/10 border border-[#06B6D4]/20 px-3 py-2 space-y-1">
               <div className="flex items-center gap-2">
                 <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
@@ -830,178 +1033,65 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     <>
                       <p className="text-[10px] text-[#06B6D4]/80">You will pay</p>
                       <p className="text-xs font-bold text-[#06B6D4]">
-                        {rateLoading ? (
-                          <span className="inline-flex items-center gap-1">
-                            <RefreshCw className="h-3 w-3 animate-spin" />
-                            Calculating…
-                          </span>
-                        ) : (
-                          `${verseAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} Verse`
-                        )}
+                        {rateLoading
+                          ? <span className="inline-flex items-center gap-1"><RefreshCw className="h-3 w-3 animate-spin" />Calculating…</span>
+                          : `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 6 : 4 })} ${tokenSymbol}`}
                       </p>
                     </>
                   ) : (
                     <p className="text-[10px] text-[#06B6D4]/80">
-                      {purchaseType === "data" ? "Select a plan to see cost" : "Enter an amount to see Verse cost"}
+                      {purchaseType === "data" ? "Select a plan to see cost" : `Enter an amount to see ${TOKEN_LABELS[paymentToken]} cost`}
                     </p>
                   )}
                 </div>
-                <Badge className="bg-cyan-500/15 text-[#06B6D4] border-cyan-500/20 text-[9px] px-1.5 py-0 leading-4 h-4 shrink-0">
-                  LIVE
-                </Badge>
+                <Badge className="bg-cyan-500/15 text-[#06B6D4] border-cyan-500/20 text-[9px] px-1.5 py-0 leading-4 h-4 shrink-0">LIVE</Badge>
               </div>
               <div className="text-[10px] text-muted-foreground">
-                {rateLoading ? (
-                  <span className="inline-flex items-center gap-1">
-                    <RefreshCw className="h-2.5 w-2.5 animate-spin" />
-                    Fetching live rate…
-                  </span>
-                ) : rateError ? (
-                  <span className="text-amber-400/80">1 ₦ ≈ {FALLBACK_VERSE_PER_NAIRA} Verse (fallback)</span>
-                ) : (
-                  <span>
-                    1 ₦ = {verseAmount > 0 ? (rateData?.versePerNairaWithFee ?? FALLBACK_VERSE_PER_NAIRA).toFixed(4) : baseRate.toFixed(4)} Verse
-                    {feePercent != null && verseAmount > 0 && (
-                      <span className="text-[#06B6D4]/60 ml-1">(incl. {feePercent}% fee)</span>
-                    )}
-                  </span>
-                )}
+                {rateLoading
+                  ? <span className="inline-flex items-center gap-1"><RefreshCw className="h-2.5 w-2.5 animate-spin" />Fetching live rate…</span>
+                  : rateError
+                  ? <span className="text-amber-400/80">Using fallback rate (live rate unavailable)</span>
+                  : <span>
+                      1 ₦ ≈ {currentRate.toFixed(paymentToken === "SOL" ? 8 : paymentToken === "USDT_POLYGON" ? 6 : 4)} {tokenSymbol}
+                      {nairaAmount > 0 && <span className="text-[#06B6D4]/60 ml-1">(incl. {feePercent}% fee)</span>}
+                    </span>}
               </div>
             </div>
 
-            {/* Spend button (desktop) / Tx hash input (mobile) */}
+            {/* ── Spend / Confirm button ───────────────────────────────── */}
             <div className="space-y-1.5">
-              {isMobile ? (
-                <>
-                  <Button
-                    className="w-full bg-[#06B6D4] text-black border-0 font-semibold h-11 hover:bg-[#0891B2]"
-                    disabled={!isFormValid || isBusy}
-                    onClick={() => {
-                      if (!isFormValid) return;
-                      setShowFinalize(true);
-                    }}
-                  >
-                    <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                    Confirm Purchase
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    className="w-full btn-gradient text-white border-0 font-semibold h-11"
-                    disabled={
-                      !isFormValid ||
-                      isBusy ||
-                      !isConnected ||
-                      !isOnPolygon ||
-                      isVerifying ||
-                      !isEligible
-                    }
-                    onClick={handleSpend}
-                  >
-                    {isSending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Awaiting wallet approval…
-                      </>
-                    ) : isConfirming ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Confirming on-chain…
-                      </>
-                    ) : isConfirmingBackend ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Verifying & notifying…
-                      </>
-                    ) : isCompleted ? (
-                      <>
-                        <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                        Purchase confirmed
-                      </>
-                    ) : (
-                      <>
-                        <Wallet className="h-4 w-4 mr-1.5" />
-                        Spend{" "}
-                        {verseAmount > 0
-                          ? `${verseAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} Verse`
-                          : ""}
-                      </>
-                    )}
-                  </Button>
-
-                  {/* Ineligibility message below the button */}
-                  {isConnected && isOnPolygon && eligibilityData && !isEligible && (
-                    <p className="text-[11px] text-amber-400/80 text-center">
-                      You need at least 2,000 VERSE on Polygon to spend
-                    </p>
-                  )}
-                  {isConnected && !isOnPolygon && (
-                    <p className="text-[11px] text-amber-400/80 text-center">
-                      Switch your wallet to Polygon network to continue
-                    </p>
-                  )}
-                  {!isConnected && (
-                    <p className="text-[11px] text-muted-foreground text-center">
-                      Connect your wallet to enable spending
-                    </p>
-                  )}
-                </>
-              )}
+              {renderSpendButton()}
             </div>
           </div>
         </div>
       </DialogContent>
 
-      {/* Finalize modal — mobile only, opened from Confirm Purchase button */}
+      {/* Finalize modal — QR flow (mobile or ECASH) */}
       <FinalizeModal
         open={showFinalize}
         onClose={() => {
           setShowFinalize(false);
-          if (txStatus === "completed" || txStatus === "failed") {
-            onClose();
-          }
+          if (txStatus === "completed" || txStatus === "failed") onClose();
         }}
         product={product}
         details={{
           purchaseType,
           phoneNumber,
           nairaAmount: parseFloat(amount) || 0,
-          verseAmount: verseAmount.toLocaleString(undefined, {
-            maximumFractionDigits: 18,
+          tokenAmount: tokenAmount.toLocaleString(undefined, {
+            maximumFractionDigits: paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 9 : 18,
             useGrouping: false,
           }),
+          tokenSymbol,
           dataPlan: selectedPlan?.label,
           currency: product?.currency ?? "₦",
         }}
-        onConfirm={(trimmed) => {
-          setTxError(null);
-          setTxHash(trimmed);
-          setTxStatus("verifying");
-          setConfirmResult(null);
-
-          const naira = parseFloat(amount) || 0;
-          const verseStr = verseAmount.toLocaleString(undefined, {
-            maximumFractionDigits: 18,
-            useGrouping: false,
-          });
-          confirmPurchase({
-            data: {
-              txHash: trimmed,
-              purchaseType,
-              phoneNumber,
-              nairaAmount: naira,
-              verseAmount: verseStr,
-              network: product?.name ?? "N/A",
-              dataPlan: selectedPlan?.label ?? undefined,
-              txUrl: `https://polygonscan.com/tx/${trimmed}`,
-            },
-          });
-        }}
+        onConfirm={handleFinalizeConfirm}
         isSubmitting={isConfirmingBackend}
         isCompleted={isCompleted}
         isFailed={isFailed}
-        error={confirmError?.message ?? null}
+        error={confirmError ?? null}
+        paymentToken={paymentToken}
       />
     </Dialog>
   );

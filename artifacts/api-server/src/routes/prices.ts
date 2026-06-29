@@ -13,71 +13,145 @@ const GetVerseNairaRateResponse = z.object({
   versePerNairaWithFee: z.number(),
 });
 
-const VERSE_CONTRACT = "0xc708d6f2153933daa50b2d0758955be0a93a8fec";
+const TokenRateSchema = z.object({
+  tokenPerNaira: z.number(),
+  nairaPerToken: z.number(),
+  feePercent: z.number(),
+});
+
+const GetAllRatesResponse = z.object({
+  verse: TokenRateSchema,
+  usdt: TokenRateSchema,
+  sol: TokenRateSchema,
+  ecash: TokenRateSchema,
+  cachedAt: z.coerce.date(),
+});
+
+export type TokenRate = z.infer<typeof TokenRateSchema>;
+export type AllRates = z.infer<typeof GetAllRatesResponse>;
+
 const VERSE_COIN_ID = "verse-bitcoin";
 const CACHE_TTL_MS = 60_000;
+const FEE_PERCENT = 2;
 
-interface RateCache {
-  data: z.infer<typeof GetVerseNairaRateResponse>;
+interface UnifiedCache {
+  verseUsd: number;
+  solUsd: number;
+  xecUsd: number;
+  usdtNgn: number;
   fetchedAt: number;
 }
 
-let rateCache: RateCache | null = null;
+let cache: UnifiedCache | null = null;
+let inFlight: Promise<UnifiedCache> | null = null;
 
-async function fetchVerseUsd(): Promise<number> {
-  const contractRes = await fetch(
-    `https://api.coingecko.com/api/v3/simple/token_price/ethereum?contract_addresses=${VERSE_CONTRACT}&vs_currencies=usd`,
+async function fetchUnified(): Promise<UnifiedCache> {
+  const res = await fetch(
+    `https://api.coingecko.com/api/v3/simple/price?ids=${VERSE_COIN_ID},tether,solana,ecash&vs_currencies=usd,ngn`,
   );
-  if (!contractRes.ok) throw new Error(`CoinGecko token_price fetch failed: HTTP ${contractRes.status}`);
-  const contractData = (await contractRes.json()) as Record<string, Record<string, number>>;
-  const fromContract = contractData[VERSE_CONTRACT]?.usd ?? contractData[VERSE_CONTRACT.toLowerCase()]?.usd;
-  if (fromContract) return fromContract;
+  if (!res.ok) throw new Error(`CoinGecko simple/price fetch failed: HTTP ${res.status}`);
+  const data = (await res.json()) as Record<string, Record<string, number>>;
 
-  const coinRes = await fetch(
-    `https://api.coingecko.com/api/v3/simple/price?ids=${VERSE_COIN_ID}&vs_currencies=usd`,
-  );
-  if (!coinRes.ok) throw new Error(`CoinGecko simple/price fallback failed: HTTP ${coinRes.status}`);
-  const coinData = (await coinRes.json()) as Record<string, Record<string, number>>;
-  const fromCoin = coinData[VERSE_COIN_ID]?.usd;
-  if (!fromCoin) throw new Error(`No VERSE/USD price available`);
-  return fromCoin;
+  const verseUsd = data[VERSE_COIN_ID]?.usd;
+  const usdtNgn = data["tether"]?.ngn;
+  const solUsd = data["solana"]?.usd;
+  const xecUsd = data["ecash"]?.usd;
+
+  if (!verseUsd) throw new Error("Missing VERSE/USD rate");
+  if (!usdtNgn) throw new Error("Missing USDT/NGN rate");
+  if (!solUsd) throw new Error("Missing SOL/USD rate");
+  if (!xecUsd) throw new Error("Missing XEC/USD rate");
+
+  return { verseUsd, solUsd, xecUsd, usdtNgn, fetchedAt: Date.now() };
 }
 
-async function fetchLiveRate(): Promise<z.infer<typeof GetVerseNairaRateResponse>> {
-  const [verseUsd, usdtNgn] = await Promise.all([
-    fetchVerseUsd(),
-    fetch("https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=ngn")
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`CoinGecko USDT/NGN fetch failed: HTTP ${res.status}`);
-        const data = (await res.json()) as { tether?: { ngn?: number } };
-        const ngn = data?.tether?.ngn;
-        if (!ngn) throw new Error(`Unexpected USDT/NGN response`);
-        return ngn;
-      }),
-  ]);
+async function getUnified(): Promise<UnifiedCache> {
+  const now = Date.now();
+  if (cache && now - cache.fetchedAt < CACHE_TTL_MS) return cache;
 
-  const nairaPerVerse = verseUsd * usdtNgn;
-  const versePerNaira = 1 / nairaPerVerse;
-  const FEE_PERCENT = 2;
-  const versePerNairaWithFee = versePerNaira * (1 + FEE_PERCENT / 100);
+  if (!inFlight) {
+    inFlight = fetchUnified()
+      .then((fresh) => {
+        cache = fresh;
+        inFlight = null;
+        return fresh;
+      })
+      .catch((err) => {
+        inFlight = null;
+        throw err;
+      });
+  }
 
-  return { versePerNaira, nairaPerVerse, verseUsd, usdtNgn, cachedAt: new Date(), feePercent: FEE_PERCENT, versePerNairaWithFee };
+  return inFlight;
+}
+
+function makeTokenRate(usdPrice: number, usdtNgn: number): z.infer<typeof TokenRateSchema> {
+  const nairaPerToken = usdPrice * usdtNgn;
+  const tokenPerNaira = 1 / nairaPerToken;
+  const tokenPerNairaWithFee = tokenPerNaira * (1 + FEE_PERCENT / 100);
+  return { tokenPerNaira: tokenPerNairaWithFee, nairaPerToken, feePercent: FEE_PERCENT };
 }
 
 router.get("/prices/verse-naira", async (req: Request, res: Response): Promise<void> => {
-  const now = Date.now();
-  if (rateCache && now - rateCache.fetchedAt < CACHE_TTL_MS) {
-    res.json(rateCache.data);
-    return;
-  }
   try {
-    const fresh = await fetchLiveRate();
-    rateCache = { data: fresh, fetchedAt: now };
-    res.json(fresh);
+    const u = await getUnified();
+    const nairaPerVerse = u.verseUsd * u.usdtNgn;
+    const versePerNaira = 1 / nairaPerVerse;
+    const versePerNairaWithFee = versePerNaira * (1 + FEE_PERCENT / 100);
+    res.json({
+      versePerNaira,
+      nairaPerVerse,
+      verseUsd: u.verseUsd,
+      usdtNgn: u.usdtNgn,
+      cachedAt: new Date(u.fetchedAt),
+      feePercent: FEE_PERCENT,
+      versePerNairaWithFee,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to fetch VERSE/Naira rate");
-    if (rateCache) { res.json(rateCache.data); return; }
+    if (cache) {
+      const u = cache;
+      const nairaPerVerse = u.verseUsd * u.usdtNgn;
+      const versePerNaira = 1 / nairaPerVerse;
+      res.json({
+        versePerNaira,
+        nairaPerVerse,
+        verseUsd: u.verseUsd,
+        usdtNgn: u.usdtNgn,
+        cachedAt: new Date(u.fetchedAt),
+        feePercent: FEE_PERCENT,
+        versePerNairaWithFee: versePerNaira * (1 + FEE_PERCENT / 100),
+      });
+      return;
+    }
     res.status(500).json({ error: "Failed to fetch live rate" });
+  }
+});
+
+router.get("/prices/rates", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const u = await getUnified();
+    res.json({
+      verse: makeTokenRate(u.verseUsd, u.usdtNgn),
+      usdt: makeTokenRate(1, u.usdtNgn),
+      sol: makeTokenRate(u.solUsd, u.usdtNgn),
+      ecash: makeTokenRate(u.xecUsd, u.usdtNgn),
+      cachedAt: new Date(u.fetchedAt),
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to fetch multi-token rates");
+    if (cache) {
+      const u = cache;
+      res.json({
+        verse: makeTokenRate(u.verseUsd, u.usdtNgn),
+        usdt: makeTokenRate(1, u.usdtNgn),
+        sol: makeTokenRate(u.solUsd, u.usdtNgn),
+        ecash: makeTokenRate(u.xecUsd, u.usdtNgn),
+        cachedAt: new Date(u.fetchedAt),
+      });
+      return;
+    }
+    res.status(500).json({ error: "Failed to fetch live rates" });
   }
 });
 

@@ -53,6 +53,12 @@ export default defineConfig({
     },
     dedupe: ["react", "react-dom"],
   },
+  define: {
+    global: "globalThis",
+  },
+  optimizeDeps: {
+    include: ["@solana/web3.js"],
+  },
   root: path.resolve(import.meta.dirname),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
