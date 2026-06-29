@@ -719,7 +719,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Data Plan</label>
                 <Select value={selectedPlanId} onValueChange={(v) => !isBusy && setSelectedPlanId(v)}>
-                  <SelectTrigger className="h-10 bg-white/5 border-white/10 text-sm focus:ring-[#136FD3]/50">
+                  <SelectTrigger className="h-10 bg-white/10 border-white/15 text-sm focus:ring-[#136FD3]/50 hover:bg-white/15 transition-colors">
                     <SelectValue placeholder="Choose a data plan" />
                   </SelectTrigger>
                   <SelectContent className="bg-card border-white/10 max-h-[280px]">
