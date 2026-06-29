@@ -18,3 +18,11 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+VITE_SOL_RECIPIENT = "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS"
+VITE_XEC_RECIPIENT = "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6"
+SOL_RECIPIENT_ADDRESS = "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS"
+XEC_RECIPIENT_ADDRESS = "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6"
