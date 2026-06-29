@@ -435,12 +435,12 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-[700px] border-white/5 bg-card/95 backdrop-blur-xl p-0 overflow-hidden !rounded-xl shadow-2xl shadow-black/50 max-h-[92dvh] sm:max-h-[88dvh]">
+      <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-[700px] border-white/5 bg-card/95 backdrop-blur-xl p-0 overflow-y-auto !rounded-xl shadow-2xl shadow-black/50 max-h-[92dvh]">
         {/* ─── Desktop: horizontal row | Mobile: vertical stack ─── */}
-        <div className="flex flex-col sm:flex-row h-full sm:max-h-[88dvh] overflow-hidden">
+        <div className="flex flex-col sm:flex-row">
           {/* Product preview image — desktop only */}
           <div className="hidden sm:block relative sm:w-[45%] sm:shrink-0 overflow-hidden">
-            <div className="aspect-[16/10] sm:aspect-auto sm:h-full relative">
+            <div className="aspect-[4/3] sm:aspect-auto sm:min-h-[280px] sm:h-full relative">
               <img
                 src={product.thumbnail}
                 alt={product.name}
