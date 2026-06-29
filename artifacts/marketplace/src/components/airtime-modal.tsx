@@ -710,12 +710,13 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Data Plan</label>
                 {/* Inline plan picker — no portal, no z-index conflicts */}
-                <div className="rounded-lg border border-white/15 bg-white/10 overflow-hidden">
+                <div className="rounded-lg border border-white/15 overflow-hidden" style={{ background: "hsl(240,10%,11%)" }}>
                   {/* Trigger row */}
                   <button
                     type="button"
                     disabled={isBusy}
                     className="w-full flex items-center justify-between px-3 h-10 text-sm text-left disabled:opacity-50"
+                    style={{ background: "hsl(240,10%,11%)" }}
                     onClick={() => !isBusy && setSelectedPlanId(selectedPlanId ? "" : "__open__")}
                   >
                     <span className={selectedPlan ? "text-foreground" : "text-muted-foreground"}>
@@ -725,12 +726,12 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                   </button>
                   {/* Inline scrollable list — always visible when no plan selected */}
                   {!selectedPlan && (
-                    <div className="border-t border-white/10 max-h-[220px] overflow-y-auto overscroll-contain bg-card/80">
+                    <div className="border-t border-white/10 max-h-[220px] overflow-y-auto overscroll-contain" style={{ background: "hsl(240,10%,9%)" }}>
                       {(["daily", "weekly", "monthly"] as DataPlanCategory[])
                         .filter((cat) => dataPlans.some((p) => p.category === cat))
                         .map((cat) => (
                           <div key={cat}>
-                            <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-white/5 sticky top-0">
+                            <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide sticky top-0" style={{ background: "hsl(240,10%,7%)" }}>
                               {CATEGORY_LABELS[cat]}
                             </div>
                             {dataPlans
@@ -742,6 +743,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                                   disabled={isBusy}
                                   onClick={() => !isBusy && setSelectedPlanId(plan.id)}
                                   className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#136FD3]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
+                                  style={{ background: "hsl(240,10%,9%)" }}
                                 >
                                   <div className="flex flex-col leading-tight min-w-0">
                                     <span className="text-xs font-medium">{plan.label}</span>
