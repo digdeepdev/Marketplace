@@ -341,6 +341,34 @@ router.post("/paywall/confirm-purchase", async (req: Request, res: Response): Pr
   const body = parsed.data;
   const paymentToken = body.paymentToken ?? "VERSE";
   const explorerUrl = body.txUrl ?? explorerUrlForToken(body.txHash, paymentToken);
+
+  // ── Runtime recipient address guard ──────────────────────────────────────────
+  // Reject the purchase before any money moves if the configured recipient
+  // address is malformed (e.g. an operator set a bad env var after startup).
+  switch (paymentToken) {
+    case "VERSE":
+    case "USDT_POLYGON":
+      if (!POLYGON_ADDRESS_RE.test(RECIPIENT_ADDRESS)) {
+        req.log.error({ RECIPIENT_ADDRESS }, "confirm-purchase blocked: POLYGON_RECIPIENT_ADDRESS is not a valid EIP-55 address");
+        res.status(500).json({ error: "Service configuration error: the recipient address is invalid. Please contact support." });
+        return;
+      }
+      break;
+    case "SOL":
+      if (!SOLANA_ADDRESS_RE.test(SOL_RECIPIENT_ADDRESS)) {
+        req.log.error({ SOL_RECIPIENT_ADDRESS }, "confirm-purchase blocked: SOL_RECIPIENT_ADDRESS is not a valid Solana base58 address");
+        res.status(500).json({ error: "Service configuration error: the recipient address is invalid. Please contact support." });
+        return;
+      }
+      break;
+    case "ECASH":
+      if (!ECASH_ADDRESS_RE.test(XEC_RECIPIENT_ADDRESS)) {
+        req.log.error({ XEC_RECIPIENT_ADDRESS }, "confirm-purchase blocked: XEC_RECIPIENT_ADDRESS is not a valid eCash cashaddr address");
+        res.status(500).json({ error: "Service configuration error: the recipient address is invalid. Please contact support." });
+        return;
+      }
+      break;
+  }
   let confirmed = false;
   let verifyError: string | undefined;
 
