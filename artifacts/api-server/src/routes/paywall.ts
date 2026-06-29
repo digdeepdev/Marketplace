@@ -198,6 +198,8 @@ async function fetchVerseBalance(walletAddress: string): Promise<bigint> {
   for (const rpc of POLYGON_RPCS) {
     try {
       const json = await jsonRpcCall(rpc, "eth_call", [{ to: VERSE_CONTRACT_POLYGON, data: encodeBalanceOf(walletAddress) }, "latest"]);
+      // Skip RPCs that return a JSON-RPC error (e.g. Ankr auth required) and try next
+      if (json.error) { logger.warn({ rpc, error: json.error }, "RPC returned JSON-RPC error, trying next"); continue; }
       const hex = (json.result as string) ?? "0x0";
       return BigInt(hex === "0x" ? "0x0" : hex);
     } catch (err) { lastError = err instanceof Error ? err : new Error(String(err)); }
@@ -209,6 +211,8 @@ async function fetchTransactionReceipt(txHash: string): Promise<unknown | null> 
   for (const rpc of POLYGON_RPCS) {
     try {
       const json = await jsonRpcCall(rpc, "eth_getTransactionReceipt", [txHash]);
+      // If the RPC returned a JSON-RPC error (e.g. Ankr 401 wrapped in HTTP 200), try next
+      if (json.error) { logger.warn({ rpc, error: json.error }, "RPC returned JSON-RPC error, trying next"); continue; }
       return json.result ?? null;
     } catch { continue; }
   }
@@ -223,18 +227,39 @@ function formatUnits(value: bigint, decimals: bigint): string {
   return `${intPart}.${fracPart.toString().padStart(Number(decimals), "0").replace(/0+$/, "")}`;
 }
 
-async function verifyPolygonErc20Tx(txHash: string, tokenContract: string): Promise<boolean> {
+async function verifyPolygonErc20Tx(txHash: string, tokenContract: string, log?: import("pino").Logger): Promise<boolean> {
   const receipt = await fetchTransactionReceipt(txHash);
-  if (!receipt) return false;
+  if (!receipt) {
+    log?.warn({ txHash }, "verifyPolygonErc20Tx: receipt is null — tx not found or all RPCs failed");
+    return false;
+  }
   const r = receipt as { status?: string; logs?: Array<{ address?: string; topics?: string[]; data?: string }> };
-  if (r.status !== "0x1") return false;
-  return (r.logs ?? []).some((log) => {
-    const topics = log.topics ?? [];
-    const matchTransfer = topics[0] === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-    const matchRecipient = topics[2]?.toLowerCase() === "0x000000000000000000000000" + RECIPIENT_ADDRESS.toLowerCase().slice(2);
-    const matchContract = log.address?.toLowerCase() === tokenContract.toLowerCase();
+  if (r.status !== "0x1") {
+    log?.warn({ txHash, status: r.status }, "verifyPolygonErc20Tx: tx status is not 0x1 (reverted or pending)");
+    return false;
+  }
+  const expectedRecipient = "0x000000000000000000000000" + RECIPIENT_ADDRESS.toLowerCase().slice(2);
+  const TRANSFER_SIG = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const matched = (r.logs ?? []).some((entry) => {
+    const topics = entry.topics ?? [];
+    const matchTransfer = topics[0] === TRANSFER_SIG;
+    const matchRecipient = topics[2]?.toLowerCase() === expectedRecipient;
+    const matchContract = entry.address?.toLowerCase() === tokenContract.toLowerCase();
     return matchTransfer && matchRecipient && matchContract;
   });
+  if (!matched) {
+    const relevantLogs = (r.logs ?? []).map((entry) => ({
+      address: entry.address,
+      topic0: entry.topics?.[0],
+      topic2: entry.topics?.[2],
+      matchContract: entry.address?.toLowerCase() === tokenContract.toLowerCase(),
+      matchTransfer: entry.topics?.[0] === TRANSFER_SIG,
+      matchRecipient: entry.topics?.[2]?.toLowerCase() === expectedRecipient,
+    }));
+    log?.warn({ txHash, tokenContract, expectedRecipient, relevantLogs },
+      "verifyPolygonErc20Tx: no matching Transfer log found");
+  }
+  return matched;
 }
 
 async function verifySolanaTx(txSignature: string): Promise<boolean> {
@@ -399,10 +424,10 @@ router.post("/paywall/confirm-purchase", async (req: Request, res: Response): Pr
   try {
     switch (paymentToken) {
       case "VERSE":
-        confirmed = await verifyPolygonErc20Tx(body.txHash, VERSE_CONTRACT_POLYGON);
+        confirmed = await verifyPolygonErc20Tx(body.txHash, VERSE_CONTRACT_POLYGON, req.log);
         break;
       case "USDT_POLYGON":
-        confirmed = await verifyPolygonErc20Tx(body.txHash, USDT_CONTRACT_POLYGON);
+        confirmed = await verifyPolygonErc20Tx(body.txHash, USDT_CONTRACT_POLYGON, req.log);
         break;
       case "SOL":
         confirmed = await verifySolanaTx(body.txHash);
