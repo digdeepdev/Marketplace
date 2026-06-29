@@ -23,17 +23,26 @@ import { useIsMobile } from "@/hooks/use-mobile";
 const POLYGON_CHAIN_ID = 137;
 const VERSE_CONTRACT = "0xc708d6f2153933daa50b2d0758955be0a93a8fec" as const;
 const USDT_CONTRACT = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" as const;
-const POLYGON_RECIPIENT = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7" as const;
+const POLYGON_RECIPIENT = ((import.meta.env.VITE_POLYGON_RECIPIENT as string | undefined) ?? "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7") as `0x${string}`;
 const SOL_RECIPIENT = (import.meta.env.VITE_SOL_RECIPIENT as string | undefined) ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
 const XEC_RECIPIENT = (import.meta.env.VITE_XEC_RECIPIENT as string | undefined) ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
 
 // ── Module-load address validation ───────────────────────────────────────────
-// Catches misconfigured VITE_SOL_RECIPIENT / VITE_XEC_RECIPIENT at startup.
+// Catches misconfigured VITE_POLYGON_RECIPIENT / VITE_SOL_RECIPIENT / VITE_XEC_RECIPIENT at startup.
+// EIP-55 Ethereum/Polygon address: 0x + 40 hex chars
+const _POLYGON_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 // Base58 alphabet (Solana): no 0, O, I, l — 32–44 characters
 const _SOL_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 // eCash cashaddr: "ecash:" prefix + 40–55 lowercase base32 chars
 const _XEC_ADDRESS_RE = /^ecash:[a-z0-9]{40,55}$/;
 
+if (!_POLYGON_ADDRESS_RE.test(POLYGON_RECIPIENT)) {
+  console.error(
+    "[VerseKit] CONFIG ERROR: POLYGON_RECIPIENT does not look like a valid EIP-55 Polygon address " +
+    "(expected 0x + 40 hex chars). Check VITE_POLYGON_RECIPIENT — payments will be sent to this value:",
+    POLYGON_RECIPIENT
+  );
+}
 if (!_SOL_ADDRESS_RE.test(SOL_RECIPIENT)) {
   console.error(
     "[VerseKit] CONFIG ERROR: SOL_RECIPIENT does not look like a valid Solana base58 address. " +

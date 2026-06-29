@@ -48,17 +48,25 @@ const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
 const VERSE_DECIMALS = 18n;
 const REQUIRED_VERSE = 2_000n * 10n ** VERSE_DECIMALS;
 const REQUIRED_VERSE_DISPLAY = "2000";
-const RECIPIENT_ADDRESS = "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7";
+const RECIPIENT_ADDRESS = process.env.POLYGON_RECIPIENT_ADDRESS ?? "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7";
 
 const SOL_RECIPIENT_ADDRESS = process.env.SOL_RECIPIENT_ADDRESS ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
 const XEC_RECIPIENT_ADDRESS = process.env.XEC_RECIPIENT_ADDRESS ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
 
 // ── Startup address validation ────────────────────────────────────────────────
+// EIP-55 Ethereum/Polygon address: 0x + 40 hex chars
+const POLYGON_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 // Base58 alphabet (Bitcoin/Solana): no 0, O, I, l — 32–44 characters
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 // eCash cashaddr: "ecash:" prefix + 40–55 lowercase base32 chars
 const ECASH_ADDRESS_RE = /^ecash:[a-z0-9]{40,55}$/;
 
+if (!POLYGON_ADDRESS_RE.test(RECIPIENT_ADDRESS)) {
+  logger.error(
+    { RECIPIENT_ADDRESS },
+    "STARTUP ERROR: POLYGON_RECIPIENT_ADDRESS does not look like a valid EIP-55 Polygon address (expected 0x + 40 hex chars) — payments would be misrouted. Set POLYGON_RECIPIENT_ADDRESS correctly and restart."
+  );
+}
 if (!SOLANA_ADDRESS_RE.test(SOL_RECIPIENT_ADDRESS)) {
   logger.error(
     { SOL_RECIPIENT_ADDRESS },
