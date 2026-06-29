@@ -240,21 +240,6 @@ export default function Marketplace() {
         </div>
       </section>
 
-      {/* Merch Section */}
-      <section id="merch-section" className="container mx-auto px-4 pb-24 z-10">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="h-8 w-8 rounded-lg bg-white/10 flex items-center justify-center">
-            <Shirt className="h-4 w-4 text-white" />
-          </div>
-          <h2 className="text-xl font-bold">Verse Merch</h2>
-          <span className="text-sm text-muted-foreground ml-2">{MERCH_PRODUCTS.length} products</span>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-          {MERCH_PRODUCTS.map((product) => (
-            <ProductCard key={product.id} product={product} onClick={handleMerchClick} />
-          ))}
-        </div>
-      </section>
 
       <AirtimeModal product={selectedProduct} open={modalOpen} onClose={() => setModalOpen(false)} />
       <MerchComingSoonModal open={merchModalOpen} onClose={() => setMerchModalOpen(false)} />
