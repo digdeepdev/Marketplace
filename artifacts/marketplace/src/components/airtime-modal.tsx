@@ -9,17 +9,8 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
 import { QRCodeSVG } from "qrcode.react";
-import { Smartphone, Signal, Wallet, Loader2, RefreshCw, Database, AlertTriangle, ExternalLink, CheckCircle2, Copy, Check } from "lucide-react";
+import { Smartphone, Signal, Wallet, Loader2, RefreshCw, Database, AlertTriangle, ExternalLink, CheckCircle2, Copy, Check, ChevronDown } from "lucide-react";
 import type { Product } from "./product-card";
 import { FinalizeModal } from "./finalize-modal";
 // ── API helpers (plain fetch, no generated client needed) ──────────────────
@@ -718,39 +709,69 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             {purchaseType === "data" && (
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Data Plan</label>
-                <Select value={selectedPlanId} onValueChange={(v) => !isBusy && setSelectedPlanId(v)}>
-                  <SelectTrigger className="h-10 bg-white/10 border-white/15 text-sm focus:ring-[#136FD3]/50 hover:bg-white/15 transition-colors">
-                    <SelectValue placeholder="Choose a data plan" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-white/10 max-h-[280px]">
-                    {Object.entries(
-                      dataPlans.reduce((groups, plan) => {
-                        (groups[plan.category] = groups[plan.category] || []).push(plan);
-                        return groups;
-                      }, {} as Record<DataPlanCategory, DataPlan[]>)
-                    ).map(([category, plans]) => (
-                      <SelectGroup key={category}>
-                        <SelectLabel className="text-[11px] text-muted-foreground font-semibold px-2 py-1">
-                          {CATEGORY_LABELS[category as DataPlanCategory]}
-                        </SelectLabel>
-                        {plans.map((plan) => (
-                          <SelectItem
-                            key={plan.id}
-                            value={plan.id}
-                            className="text-xs focus:bg-[#136FD3]/10 focus:text-[#136FD3]"
-                          >
-                            <div className="flex flex-col leading-tight py-0.5">
-                              <span className="font-medium">{plan.label}</span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {plan.dataValue} · {plan.validity}
-                              </span>
+                {/* Inline plan picker — no portal, no z-index conflicts */}
+                <div className="rounded-lg border border-white/15 bg-white/10 overflow-hidden">
+                  {/* Trigger row */}
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    className="w-full flex items-center justify-between px-3 h-10 text-sm text-left disabled:opacity-50"
+                    onClick={() => !isBusy && setSelectedPlanId(selectedPlanId ? "" : "__open__")}
+                  >
+                    <span className={selectedPlan ? "text-foreground" : "text-muted-foreground"}>
+                      {selectedPlan ? selectedPlan.label : "Choose a data plan"}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-2" />
+                  </button>
+                  {/* Inline scrollable list — always visible when no plan selected */}
+                  {!selectedPlan && (
+                    <div className="border-t border-white/10 max-h-[220px] overflow-y-auto overscroll-contain bg-card/80">
+                      {(["daily", "weekly", "monthly"] as DataPlanCategory[])
+                        .filter((cat) => dataPlans.some((p) => p.category === cat))
+                        .map((cat) => (
+                          <div key={cat}>
+                            <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-white/5 sticky top-0">
+                              {CATEGORY_LABELS[cat]}
                             </div>
-                          </SelectItem>
+                            {dataPlans
+                              .filter((p) => p.category === cat)
+                              .map((plan) => (
+                                <button
+                                  key={plan.id}
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => !isBusy && setSelectedPlanId(plan.id)}
+                                  className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#136FD3]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
+                                >
+                                  <div className="flex flex-col leading-tight min-w-0">
+                                    <span className="text-xs font-medium">{plan.label}</span>
+                                    <span className="text-[10px] text-muted-foreground">{plan.dataValue} · {plan.validity}</span>
+                                  </div>
+                                  <span className="text-xs font-semibold text-[#136FD3] shrink-0 ml-3">₦{plan.price.toLocaleString()}</span>
+                                </button>
+                              ))}
+                          </div>
                         ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    </div>
+                  )}
+                  {/* Selected plan — show change link */}
+                  {selectedPlan && (
+                    <div className="border-t border-white/10 px-3 py-2 flex items-center justify-between bg-[#136FD3]/10">
+                      <div className="flex flex-col leading-tight min-w-0">
+                        <span className="text-[10px] text-[#136FD3]/80">Selected</span>
+                        <span className="text-xs font-semibold text-[#136FD3]">{selectedPlan.dataValue} · {selectedPlan.validity}</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => !isBusy && setSelectedPlanId("")}
+                        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-3 disabled:opacity-50"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
