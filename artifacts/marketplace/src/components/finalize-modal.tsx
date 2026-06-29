@@ -116,6 +116,13 @@ export function FinalizeModal({
     }
   }, [isSubmitting, timerActive]);
 
+  // Stop the timer immediately on failure — no countdown for an instant server error
+  useEffect(() => {
+    if (isFailed) {
+      setTimerActive(false);
+    }
+  }, [isFailed]);
+
   useEffect(() => {
     if (!timerActive) return;
     const interval = setInterval(() => {
@@ -132,7 +139,8 @@ export function FinalizeModal({
 
   const progress = ((180 - timerSeconds) / 180) * 100;
   const isFormValid = validateTxHash(txHash, paymentToken);
-  const isBusy = isSubmitting || timerActive;
+  // A failed response is immediate — never show the countdown spinner for a known failure
+  const isBusy = !isFailed && (isSubmitting || timerActive);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
