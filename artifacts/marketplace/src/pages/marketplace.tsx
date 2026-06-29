@@ -25,7 +25,6 @@ import verseCapUrl from "@assets/fila_cap_1780685259464.png?url";
 const CAROUSEL_SLIDES = [
   { title: "", subtitle: "", cta: "", category: "logo", image: carouselBgUrl },
   { title: "Airtime & Data", subtitle: "Top up across all Nigerian networks", cta: "Spend Now", category: "banner", image: carouselBgUrl },
-  { title: "Verse Merch", subtitle: "Branded tees, hoodies, and accessories for the community", cta: "Spend Now", category: "template", image: carouselBgUrl },
 ];
 
 const AIRTIME_PRODUCTS: Product[] = [
@@ -156,7 +155,7 @@ export default function Marketplace() {
                           </span>
                         </h1>
                         <p className="text-white/80 text-base md:text-lg max-w-md mb-6">
-                          Spend Verse On...
+                          Spend Crypto On...
                         </p>
                       </>
                     )}
