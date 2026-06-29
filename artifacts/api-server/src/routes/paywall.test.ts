@@ -342,4 +342,162 @@ describe("POST /api/paywall/confirm-purchase", () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ confirmed: true });
   });
+
+  // ── SOL verification ────────────────────────────────────────────────────────
+
+  // Default SOL recipient from paywall.ts
+  const SOL_RECIPIENT = "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
+
+  const VALID_SOLANA_TX_RESPONSE = {
+    result: {
+      meta: {
+        err: null,
+        preBalances: [5_000_000, 0],
+        postBalances: [4_500_000, 500_000],
+      },
+      transaction: {
+        message: {
+          accountKeys: ["SomeSenderAddress1111111111111111111111111", SOL_RECIPIENT],
+        },
+      },
+    },
+  };
+
+  it("returns 200 with confirmed:true when Solana RPC returns a valid tx with positive balance increase to recipient", async () => {
+    vi.stubGlobal("fetch", makeFetchMock(VALID_SOLANA_TX_RESPONSE));
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .post("/api/paywall/confirm-purchase")
+      .send({ ...VALID_BODY, paymentToken: "SOL" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      confirmed: true,
+      txHash: VALID_BODY.txHash,
+      explorerUrl: expect.stringContaining("solscan.io"),
+    });
+  });
+
+  it("returns 402 when Solana tx has meta.err set", async () => {
+    const failedSolanaTx = {
+      result: {
+        meta: {
+          err: { InstructionError: [0, "Custom"] },
+          preBalances: [5_000_000, 0],
+          postBalances: [4_500_000, 500_000],
+        },
+        transaction: {
+          message: {
+            accountKeys: ["SomeSenderAddress1111111111111111111111111", SOL_RECIPIENT],
+          },
+        },
+      },
+    };
+    vi.stubGlobal("fetch", makeFetchMock(failedSolanaTx));
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .post("/api/paywall/confirm-purchase")
+      .send({ ...VALID_BODY, paymentToken: "SOL" });
+
+    expect(res.status).toBe(402);
+    expect(res.body).toMatchObject({ confirmed: false });
+  });
+
+  it("returns 402 when recipient is not in Solana tx accountKeys", async () => {
+    const wrongRecipientSolanaTx = {
+      result: {
+        meta: {
+          err: null,
+          preBalances: [5_000_000, 0],
+          postBalances: [4_500_000, 500_000],
+        },
+        transaction: {
+          message: {
+            accountKeys: ["SomeSenderAddress1111111111111111111111111", "SomeOtherAddress111111111111111111111111111"],
+          },
+        },
+      },
+    };
+    vi.stubGlobal("fetch", makeFetchMock(wrongRecipientSolanaTx));
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .post("/api/paywall/confirm-purchase")
+      .send({ ...VALID_BODY, paymentToken: "SOL" });
+
+    expect(res.status).toBe(402);
+    expect(res.body).toMatchObject({ confirmed: false });
+  });
+
+  // ── eCash verification ──────────────────────────────────────────────────────
+
+  // Default XEC recipient from paywall.ts
+  const XEC_RECIPIENT = "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
+
+  const VALID_ECASH_TX_RESPONSE = {
+    data: {
+      [VALID_BODY.txHash]: {
+        transaction: { block_id: 800_000 },
+        outputs: [{ recipient: XEC_RECIPIENT, value: 100_000, is_spent: false }],
+      },
+    },
+  };
+
+  it("returns 200 with confirmed:true when Blockchair returns a confirmed block with matching XEC output", async () => {
+    vi.stubGlobal("fetch", makeFetchMock(VALID_ECASH_TX_RESPONSE));
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .post("/api/paywall/confirm-purchase")
+      .send({ ...VALID_BODY, paymentToken: "ECASH" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      confirmed: true,
+      txHash: VALID_BODY.txHash,
+      explorerUrl: expect.stringContaining("blockchair.com"),
+    });
+  });
+
+  it("returns 402 when Blockchair returns block_id of -1 (unconfirmed)", async () => {
+    const unconfirmedEcashTx = {
+      data: {
+        [VALID_BODY.txHash]: {
+          transaction: { block_id: -1 },
+          outputs: [{ recipient: XEC_RECIPIENT, value: 100_000 }],
+        },
+      },
+    };
+    vi.stubGlobal("fetch", makeFetchMock(unconfirmedEcashTx));
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .post("/api/paywall/confirm-purchase")
+      .send({ ...VALID_BODY, paymentToken: "ECASH" });
+
+    expect(res.status).toBe(402);
+    expect(res.body).toMatchObject({ confirmed: false });
+  });
+
+  it("returns 402 when Blockchair outputs don't include the XEC recipient", async () => {
+    const wrongOutputEcashTx = {
+      data: {
+        [VALID_BODY.txHash]: {
+          transaction: { block_id: 800_000 },
+          outputs: [{ recipient: "ecash:qrsome-completely-different-address000000000", value: 100_000 }],
+        },
+      },
+    };
+    vi.stubGlobal("fetch", makeFetchMock(wrongOutputEcashTx));
+    const app = await buildApp();
+
+    const res = await supertest(app)
+      .post("/api/paywall/confirm-purchase")
+      .send({ ...VALID_BODY, paymentToken: "ECASH" });
+
+    expect(res.status).toBe(402);
+    expect(res.body).toMatchObject({ confirmed: false });
+  });
 });
