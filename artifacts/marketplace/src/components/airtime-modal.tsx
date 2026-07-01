@@ -696,10 +696,34 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                 size="sm"
                 variant="ghost"
                 className="h-7 px-2 text-[10px] text-[#06B6D4] hover:text-[#06B6D4] hover:bg-[#06B6D4]/10 shrink-0"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(recipientAddress);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2000);
+                onClick={() => {
+                  const doFallbackCopy = () => {
+                    try {
+                      const ta = document.createElement("textarea");
+                      ta.value = recipientAddress;
+                      ta.style.position = "fixed";
+                      ta.style.top = "0";
+                      ta.style.left = "0";
+                      ta.style.opacity = "0";
+                      document.body.appendChild(ta);
+                      ta.focus();
+                      ta.select();
+                      document.execCommand("copy");
+                      document.body.removeChild(ta);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    } catch {
+                      // Copy not supported — user can long-press to copy the address above
+                    }
+                  };
+                  if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(recipientAddress).then(() => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }).catch(doFallbackCopy);
+                  } else {
+                    doFallbackCopy();
+                  }
                 }}
               >
                 {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
