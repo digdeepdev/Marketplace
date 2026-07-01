@@ -11,7 +11,7 @@ const GetPaywallVerifyVerseBalanceResponse = z.object({
   required: z.string(),
 });
 
-const PaymentTokenSchema = z.enum(["VERSE", "USDT_POLYGON", "SOL", "ECASH"]);
+const PaymentTokenSchema = z.enum(["VERSE", "USDT_POLYGON", "SOL", "ECASH", "USDT_BSC", "USDT_SOL"]);
 export type PaymentToken = z.infer<typeof PaymentTokenSchema>;
 
 const PostPaywallConfirmPurchaseBody = z.object({
@@ -39,16 +39,24 @@ type PurchaseEmailBody = z.infer<typeof PostPaywallConfirmPurchaseBody>;
 
 const VERSE_CONTRACT_POLYGON = "0xc708d6f2153933daa50b2d0758955be0a93a8fec";
 const USDT_CONTRACT_POLYGON = "0xc2132d05d31c914a87c6611c10748aeb04b58e8f";
+const BSC_USDT_CONTRACT = "0x55d398326f99059ff775485246999027b3197955";
+const SOL_USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 const POLYGON_RPCS = [
   "https://rpc.ankr.com/polygon",
   "https://polygon-bor-rpc.publicnode.com",
   "https://polygon.drpc.org",
+];
+const BSC_RPCS = [
+  "https://bsc-dataseed.binance.org",
+  "https://bsc-dataseed1.defibit.io",
+  "https://bsc.publicnode.com",
 ];
 const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
 const VERSE_DECIMALS = 18n;
 const REQUIRED_VERSE = 2_000n * 10n ** VERSE_DECIMALS;
 const REQUIRED_VERSE_DISPLAY = "2000";
 const RECIPIENT_ADDRESS = process.env.POLYGON_RECIPIENT_ADDRESS ?? "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7";
+const BSC_RECIPIENT_ADDRESS = process.env.BSC_RECIPIENT_ADDRESS ?? "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7";
 
 const SOL_RECIPIENT_ADDRESS = process.env.SOL_RECIPIENT_ADDRESS ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
 const XEC_RECIPIENT_ADDRESS = process.env.XEC_RECIPIENT_ADDRESS ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
@@ -65,6 +73,12 @@ if (!POLYGON_ADDRESS_RE.test(RECIPIENT_ADDRESS)) {
   logger.error(
     { RECIPIENT_ADDRESS },
     "STARTUP ERROR: POLYGON_RECIPIENT_ADDRESS does not look like a valid EIP-55 Polygon address (expected 0x + 40 hex chars) — payments would be misrouted. Set POLYGON_RECIPIENT_ADDRESS correctly and restart."
+  );
+}
+if (!POLYGON_ADDRESS_RE.test(BSC_RECIPIENT_ADDRESS)) {
+  logger.error(
+    { BSC_RECIPIENT_ADDRESS },
+    "STARTUP ERROR: BSC_RECIPIENT_ADDRESS does not look like a valid EIP-55 BSC address (expected 0x + 40 hex chars) — payments would be misrouted. Set BSC_RECIPIENT_ADDRESS correctly and restart."
   );
 }
 if (!SOLANA_ADDRESS_RE.test(SOL_RECIPIENT_ADDRESS)) {
@@ -92,6 +106,8 @@ const TOKEN_LABELS: Record<PaymentToken, string> = {
   USDT_POLYGON: "USDT (Polygon)",
   SOL: "SOL (Solana)",
   ECASH: "eCash (XEC)",
+  USDT_BSC: "USDT (BEP20 / BSC)",
+  USDT_SOL: "USDT (Solana SPL)",
 };
 
 function explorerUrlForToken(txHash: string, paymentToken: PaymentToken): string {
@@ -100,9 +116,12 @@ function explorerUrlForToken(txHash: string, paymentToken: PaymentToken): string
     case "USDT_POLYGON":
       return `https://polygonscan.com/tx/${txHash}`;
     case "SOL":
+    case "USDT_SOL":
       return `https://solscan.io/tx/${txHash}`;
     case "ECASH":
       return `https://blockchair.com/ecash/transaction/${txHash}`;
+    case "USDT_BSC":
+      return `https://bscscan.com/tx/${txHash}`;
   }
 }
 
@@ -331,6 +350,128 @@ const BlockchairResponseSchema = z.object({
   data: z.record(z.string(), BlockchairTxEntrySchema).optional(),
 });
 
+// Parse a human-readable decimal amount string (e.g. "5.23") to a raw bigint
+// with the given number of decimal places (e.g. 18 for VERSE, 6 for USDT SPL).
+function parseRawAmount(amountStr: string, decimals: bigint): bigint {
+  const [intPart = "0", fracPart = ""] = amountStr.split(".");
+  const fracPadded = fracPart.padEnd(Number(decimals), "0").slice(0, Number(decimals));
+  return BigInt(intPart) * (10n ** decimals) + BigInt(fracPadded || "0");
+}
+
+async function fetchBscTransactionReceipt(txHash: string): Promise<unknown | null> {
+  for (const rpc of BSC_RPCS) {
+    try {
+      const json = await jsonRpcCall(rpc, "eth_getTransactionReceipt", [txHash]);
+      if (json.error) { logger.warn({ rpc, error: json.error }, "BSC RPC returned JSON-RPC error, trying next"); continue; }
+      return json.result ?? null;
+    } catch { continue; }
+  }
+  return null;
+}
+
+async function verifyBscUsdtTx(txHash: string, expectedRawAmount: bigint, log?: import("pino").Logger): Promise<boolean> {
+  const receipt = await fetchBscTransactionReceipt(txHash);
+  if (!receipt) {
+    log?.warn({ txHash }, "verifyBscUsdtTx: receipt is null — tx not found or all BSC RPCs failed");
+    return false;
+  }
+  const r = receipt as { status?: string; logs?: Array<{ address?: string; topics?: string[]; data?: string }> };
+  if (r.status !== "0x1") {
+    log?.warn({ txHash, status: r.status }, "verifyBscUsdtTx: tx status is not 0x1 (reverted or pending)");
+    return false;
+  }
+  const expectedRecipient = "0x000000000000000000000000" + BSC_RECIPIENT_ADDRESS.toLowerCase().slice(2);
+  const TRANSFER_SIG = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const matched = (r.logs ?? []).some((entry) => {
+    const topics = entry.topics ?? [];
+    const matchTransfer = topics[0] === TRANSFER_SIG;
+    const matchRecipient = topics[2]?.toLowerCase() === expectedRecipient;
+    const matchContract = entry.address?.toLowerCase() === BSC_USDT_CONTRACT.toLowerCase();
+    if (!matchTransfer || !matchRecipient || !matchContract) return false;
+    // Decode Transfer amount from log data (uint256, 32 bytes big-endian hex)
+    const rawHex = entry.data ?? "0x0";
+    const rawAmount = BigInt(rawHex === "0x" ? "0x0" : rawHex);
+    const amountOk = rawAmount >= expectedRawAmount;
+    if (!amountOk) {
+      log?.warn({ txHash, rawAmount: rawAmount.toString(), expectedRawAmount: expectedRawAmount.toString() },
+        "verifyBscUsdtTx: Transfer amount is less than expected");
+    }
+    return amountOk;
+  });
+  if (!matched) {
+    const relevantLogs = (r.logs ?? []).map((entry) => ({
+      address: entry.address,
+      topic0: entry.topics?.[0],
+      topic2: entry.topics?.[2],
+      matchContract: entry.address?.toLowerCase() === BSC_USDT_CONTRACT.toLowerCase(),
+      matchTransfer: entry.topics?.[0] === TRANSFER_SIG,
+      matchRecipient: entry.topics?.[2]?.toLowerCase() === expectedRecipient,
+    }));
+    log?.warn({ txHash, expectedRecipient, expectedRawAmount: expectedRawAmount.toString(), relevantLogs },
+      "verifyBscUsdtTx: no matching Transfer log with sufficient amount found");
+  }
+  return matched;
+}
+
+async function verifySolanaUsdtTx(txSignature: string, expectedRawAmount: bigint, log?: import("pino").Logger): Promise<boolean> {
+  try {
+    const res = await fetch(SOLANA_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1,
+        method: "getTransaction",
+        params: [txSignature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as {
+      result?: {
+        meta?: {
+          err?: unknown;
+          preTokenBalances?: Array<{ mint?: string; owner?: string; uiTokenAmount?: { amount?: string; uiAmount?: number | null } }>;
+          postTokenBalances?: Array<{ mint?: string; owner?: string; uiTokenAmount?: { amount?: string; uiAmount?: number | null } }>;
+        };
+      } | null;
+    };
+    if (!data.result) return false;
+    if (data.result.meta?.err != null) return false;
+
+    const preBalances = data.result.meta?.preTokenBalances ?? [];
+    const postBalances = data.result.meta?.postTokenBalances ?? [];
+
+    // Find the recipient's USDT entry in postTokenBalances
+    const postEntry = postBalances.find(
+      (b) => b.mint === SOL_USDT_MINT && b.owner === SOL_RECIPIENT_ADDRESS
+    );
+    if (!postEntry) {
+      log?.warn({ txSignature, SOL_RECIPIENT_ADDRESS, SOL_USDT_MINT },
+        "verifySolanaUsdtTx: recipient USDT entry not found in postTokenBalances");
+      return false;
+    }
+    // Use integer string amount (not float uiAmount) to avoid precision loss
+    const postRaw = BigInt(postEntry.uiTokenAmount?.amount ?? "0");
+
+    // Find corresponding preBalance entry
+    const preEntry = preBalances.find(
+      (b) => b.mint === SOL_USDT_MINT && b.owner === SOL_RECIPIENT_ADDRESS
+    );
+    const preRaw = BigInt(preEntry?.uiTokenAmount?.amount ?? "0");
+
+    const delta = postRaw > preRaw ? postRaw - preRaw : 0n;
+    const amountOk = delta >= expectedRawAmount;
+    if (!amountOk) {
+      log?.warn({ txSignature, delta: delta.toString(), expectedRawAmount: expectedRawAmount.toString() },
+        "verifySolanaUsdtTx: received USDT amount is less than expected");
+    }
+    return amountOk;
+  } catch (err) {
+    log?.warn({ err, txSignature }, "verifySolanaUsdtTx: exception during verification");
+    return false;
+  }
+}
+
 async function verifyEcashTx(txid: string): Promise<boolean> {
   try {
     const res = await fetch(`https://api.blockchair.com/ecash/dashboards/transaction/${txid}`, {
@@ -403,7 +544,15 @@ router.post("/paywall/confirm-purchase", async (req: Request, res: Response): Pr
         return;
       }
       break;
+    case "USDT_BSC":
+      if (!POLYGON_ADDRESS_RE.test(BSC_RECIPIENT_ADDRESS)) {
+        req.log.error({ BSC_RECIPIENT_ADDRESS }, "confirm-purchase blocked: BSC_RECIPIENT_ADDRESS is not a valid EIP-55 address");
+        res.status(500).json({ error: "Service configuration error: the recipient address is invalid. Please contact support." });
+        return;
+      }
+      break;
     case "SOL":
+    case "USDT_SOL":
       if (!SOLANA_ADDRESS_RE.test(SOL_RECIPIENT_ADDRESS)) {
         req.log.error({ SOL_RECIPIENT_ADDRESS }, "confirm-purchase blocked: SOL_RECIPIENT_ADDRESS is not a valid Solana base58 address");
         res.status(500).json({ error: "Service configuration error: the recipient address is invalid. Please contact support." });
@@ -429,9 +578,21 @@ router.post("/paywall/confirm-purchase", async (req: Request, res: Response): Pr
       case "USDT_POLYGON":
         confirmed = await verifyPolygonErc20Tx(body.txHash, USDT_CONTRACT_POLYGON, req.log);
         break;
+      case "USDT_BSC": {
+        // BSC USDT has 18 decimals (unlike USDT on Ethereum/Polygon which uses 6)
+        const expectedRaw = parseRawAmount(body.verseAmount, 18n);
+        confirmed = await verifyBscUsdtTx(body.txHash, expectedRaw, req.log);
+        break;
+      }
       case "SOL":
         confirmed = await verifySolanaTx(body.txHash);
         break;
+      case "USDT_SOL": {
+        // Solana SPL USDT has 6 decimals
+        const expectedRaw = parseRawAmount(body.verseAmount, 6n);
+        confirmed = await verifySolanaUsdtTx(body.txHash, expectedRaw, req.log);
+        break;
+      }
       case "ECASH":
         confirmed = await verifyEcashTx(body.txHash);
         break;

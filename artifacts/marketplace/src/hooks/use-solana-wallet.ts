@@ -33,6 +33,7 @@ export interface SolanaWalletState {
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
   sendSol: (recipient: string, amountSol: number) => Promise<string>;
+  sendSplToken: (mintAddress: string, recipient: string, amount: number, decimals: number) => Promise<string>;
   confirmTx: (sig: string, timeoutMs?: number) => Promise<void>;
 }
 
@@ -102,6 +103,55 @@ export function useSolanaWallet(): SolanaWalletState {
     return sig;
   }, [publicKey]);
 
+  const sendSplToken = useCallback(async (
+    mintAddress: string,
+    recipient: string,
+    amount: number,
+    decimals: number,
+  ): Promise<string> => {
+    const { Connection, PublicKey, Transaction } = await import("@solana/web3.js");
+    const {
+      getAssociatedTokenAddress,
+      createTransferInstruction,
+      createAssociatedTokenAccountIdempotentInstruction,
+    } = await import("@solana/spl-token");
+
+    const provider = getProvider();
+    if (!provider || !publicKey) throw new Error("Solana wallet not connected");
+
+    const connection = new Connection(SOL_RPC, "confirmed");
+    const fromPubkey = new PublicKey(publicKey);
+    const mintPubkey = new PublicKey(mintAddress);
+    const toPubkey = new PublicKey(recipient);
+
+    const fromAta = await getAssociatedTokenAddress(mintPubkey, fromPubkey);
+    const toAta = await getAssociatedTokenAddress(mintPubkey, toPubkey);
+
+    const rawAmount = BigInt(Math.round(amount * 10 ** decimals));
+
+    const { blockhash } = await connection.getLatestBlockhash();
+    const tx = new Transaction();
+    tx.recentBlockhash = blockhash;
+    tx.feePayer = fromPubkey;
+
+    tx.add(
+      createAssociatedTokenAccountIdempotentInstruction(
+        fromPubkey,
+        toAta,
+        toPubkey,
+        mintPubkey,
+      ),
+    );
+    tx.add(
+      createTransferInstruction(fromAta, toAta, fromPubkey, rawAmount),
+    );
+
+    const signed = await provider.signTransaction(tx);
+    const raw = (signed as { serialize(): Uint8Array }).serialize();
+    const sig = await connection.sendRawTransaction(raw);
+    return sig;
+  }, [publicKey]);
+
   const confirmTx = useCallback(async (sig: string, timeoutMs = 60_000): Promise<void> => {
     const { Connection } = await import("@solana/web3.js");
     const connection = new Connection(SOL_RPC, "confirmed");
@@ -117,5 +167,5 @@ export function useSolanaWallet(): SolanaWalletState {
     throw new Error("Solana transaction confirmation timed out. Please check Solscan and submit the hash manually.");
   }, []);
 
-  return { hasProvider, isConnected, publicKey, isConnecting, connect, disconnect, sendSol, confirmTx };
+  return { hasProvider, isConnected, publicKey, isConnecting, connect, disconnect, sendSol, sendSplToken, confirmTx };
 }

@@ -21,14 +21,18 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const POLYGON_CHAIN_ID = 137;
+const BSC_CHAIN_ID = 56;
 const VERSE_CONTRACT = "0xc708d6f2153933daa50b2d0758955be0a93a8fec" as const;
 const USDT_CONTRACT = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" as const;
+const BSC_USDT_CONTRACT = "0x55d398326f99059fF775485246999027B3197955" as const;
+const SOL_USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 const POLYGON_RECIPIENT = ((import.meta.env.VITE_POLYGON_RECIPIENT as string | undefined) ?? "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7") as `0x${string}`;
+const BSC_RECIPIENT = ((import.meta.env.VITE_BSC_RECIPIENT as string | undefined) ?? "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7") as `0x${string}`;
 const SOL_RECIPIENT = (import.meta.env.VITE_SOL_RECIPIENT as string | undefined) ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
 const XEC_RECIPIENT = (import.meta.env.VITE_XEC_RECIPIENT as string | undefined) ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
 
 // ── Module-load address validation ───────────────────────────────────────────
-// Catches misconfigured VITE_POLYGON_RECIPIENT / VITE_SOL_RECIPIENT / VITE_XEC_RECIPIENT at startup.
+// Catches misconfigured recipient env vars at startup.
 // EIP-55 Ethereum/Polygon address: 0x + 40 hex chars
 const _POLYGON_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 // Base58 alphabet (Solana): no 0, O, I, l — 32–44 characters
@@ -41,6 +45,13 @@ if (!_POLYGON_ADDRESS_RE.test(POLYGON_RECIPIENT)) {
     "[VerseKit] CONFIG ERROR: POLYGON_RECIPIENT does not look like a valid EIP-55 Polygon address " +
     "(expected 0x + 40 hex chars). Check VITE_POLYGON_RECIPIENT — payments will be sent to this value:",
     POLYGON_RECIPIENT
+  );
+}
+if (!_POLYGON_ADDRESS_RE.test(BSC_RECIPIENT)) {
+  console.error(
+    "[VerseKit] CONFIG ERROR: BSC_RECIPIENT does not look like a valid EIP-55 BSC address " +
+    "(expected 0x + 40 hex chars). Check VITE_BSC_RECIPIENT — payments will be sent to this value:",
+    BSC_RECIPIENT
   );
 }
 if (!_SOL_ADDRESS_RE.test(SOL_RECIPIENT)) {
@@ -63,6 +74,8 @@ const TOKEN_SYMBOLS: Record<PaymentToken, string> = {
   USDT_POLYGON: "USDT",
   SOL: "SOL",
   ECASH: "XEC",
+  USDT_BSC: "USDT",
+  USDT_SOL: "USDT",
 };
 
 const TOKEN_LABELS: Record<PaymentToken, string> = {
@@ -70,6 +83,8 @@ const TOKEN_LABELS: Record<PaymentToken, string> = {
   USDT_POLYGON: "USDT",
   SOL: "SOL",
   ECASH: "eCash",
+  USDT_BSC: "USDT (BSC)",
+  USDT_SOL: "USDT (Solana)",
 };
 
 const RECIPIENT_FOR_TOKEN: Record<PaymentToken, string> = {
@@ -77,6 +92,8 @@ const RECIPIENT_FOR_TOKEN: Record<PaymentToken, string> = {
   USDT_POLYGON: POLYGON_RECIPIENT,
   SOL: SOL_RECIPIENT,
   ECASH: XEC_RECIPIENT,
+  USDT_BSC: BSC_RECIPIENT,
+  USDT_SOL: SOL_RECIPIENT,
 };
 
 const EXPLORER_FOR_TOKEN: Record<PaymentToken, (hash: string) => string> = {
@@ -84,6 +101,8 @@ const EXPLORER_FOR_TOKEN: Record<PaymentToken, (hash: string) => string> = {
   USDT_POLYGON: (h) => `https://polygonscan.com/tx/${h}`,
   SOL: (h) => `https://solscan.io/tx/${h}`,
   ECASH: (h) => `https://blockchair.com/ecash/transaction/${h}`,
+  USDT_BSC: (h) => `https://bscscan.com/tx/${h}`,
+  USDT_SOL: (h) => `https://solscan.io/tx/${h}`,
 };
 
 // Fallback tokenPerNaira rates (with 2% fee, approximate)
@@ -92,6 +111,8 @@ const FALLBACK_RATES: Record<PaymentToken, number> = {
   USDT_POLYGON: 0.000630,
   SOL: 0.0000042,
   ECASH: 17.99,
+  USDT_BSC: 0.000630,
+  USDT_SOL: 0.000630,
 };
 
 // ── API hooks ────────────────────────────────────────────────────────────────
@@ -334,13 +355,16 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const selectedPlan = dataPlans.find((p) => p.id === selectedPlanId);
 
   const { writeContract, isPending: isSending } = useWriteContract();
+  const isEvmToken = paymentToken === "VERSE" || paymentToken === "USDT_POLYGON" || paymentToken === "USDT_BSC";
   const { data: receipt, isLoading: isConfirming } = useWaitForTransactionReceipt({
-    hash: txHash && (paymentToken === "VERSE" || paymentToken === "USDT_POLYGON") ? (txHash as `0x${string}`) : undefined,
+    hash: txHash && isEvmToken ? (txHash as `0x${string}`) : undefined,
+    chainId: paymentToken === "USDT_BSC" ? BSC_CHAIN_ID : POLYGON_CHAIN_ID,
   });
 
   const { data: ratesData, isLoading: rateLoading, isError: rateError } = useAllRates(open);
 
   const isOnPolygon = chainId === POLYGON_CHAIN_ID;
+  const isOnBsc = chainId === BSC_CHAIN_ID;
 
   const verifyBalanceAddress = isConnected && isOnPolygon && address && paymentToken === "VERSE" ? address : undefined;
   const { data: eligibilityData, isLoading: isVerifying } = useVerseBalance(verifyBalanceAddress);
@@ -431,7 +455,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
 
   // ── Derived values ─────────────────────────────────────────────────────────
   const nairaAmount = parseFloat(amount) || 0;
-  const rateKey = { VERSE: "verse", USDT_POLYGON: "usdt", SOL: "sol", ECASH: "ecash" } as const;
+  const rateKey = { VERSE: "verse", USDT_POLYGON: "usdt", SOL: "sol", ECASH: "ecash", USDT_BSC: "usdt", USDT_SOL: "usdt" } as const;
   const currentRate = ratesData?.[rateKey[paymentToken]]?.tokenPerNaira ?? FALLBACK_RATES[paymentToken];
   const feePercent = ratesData?.[rateKey[paymentToken]]?.feePercent ?? 2;
   const tokenAmount = nairaAmount * currentRate;
@@ -444,8 +468,10 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const isCompleted = txStatus === "completed";
   const isFailed = txStatus === "failed";
 
-  // Show QR for: mobile (all tokens), desktop eCash, or desktop SOL with no injected wallet
-  const showQRFlow = isMobile || paymentToken === "ECASH" || (paymentToken === "SOL" && !solanaWallet.hasProvider);
+  // Show QR for: mobile (all tokens), desktop eCash, desktop SOL/USDT_SOL with no injected Solana wallet
+  const showQRFlow = isMobile || paymentToken === "ECASH"
+    || (paymentToken === "SOL" && !solanaWallet.hasProvider)
+    || (paymentToken === "USDT_SOL" && !solanaWallet.hasProvider);
 
   const shortAddress = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
   const balanceShortfall =
@@ -454,8 +480,10 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       : null;
 
   // ── Handlers ───────────────────────────────────────────────────────────────
+  type EthWindow = { ethereum?: { request(args: { method: string; params?: unknown[] }): Promise<unknown> } };
+
   async function handleSwitchToPolygon() {
-    const eth = (window as unknown as { ethereum?: { request(args: { method: string; params?: unknown[] }): Promise<unknown> } }).ethereum;
+    const eth = (window as unknown as EthWindow).ethereum;
     if (!eth) return;
     try {
       await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x89" }] });
@@ -478,8 +506,34 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     }
   }
 
+  async function handleSwitchToBsc() {
+    const eth = (window as unknown as EthWindow).ethereum;
+    if (!eth) return;
+    try {
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x38" }] });
+    } catch (switchErr: unknown) {
+      const err = switchErr as { code?: number };
+      if (err?.code === 4902) {
+        try {
+          await eth.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: "0x38",
+              chainName: "BNB Smart Chain",
+              nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
+              rpcUrls: ["https://bsc-dataseed.binance.org"],
+              blockExplorerUrls: ["https://bscscan.com"],
+            }],
+          });
+        } catch { /* ignore */ }
+      }
+    }
+  }
+
   function handleEVMSpend() {
-    if (!address || !isOnPolygon) return;
+    if (!address) return;
+    if (paymentToken === "USDT_BSC" && !isOnBsc) return;
+    if ((paymentToken === "VERSE" || paymentToken === "USDT_POLYGON") && !isOnPolygon) return;
     setTxError(null);
     setTxStatus("sending");
     setConfirmResult(null);
@@ -504,6 +558,46 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
           onError: (err) => { setTxStatus("failed"); setTxError(err.message || "Transaction failed to submit"); },
         },
       );
+    } else if (paymentToken === "USDT_BSC") {
+      const rawAmount = parseUnits(tokenAmountStr, 18);
+      writeContract(
+        { address: BSC_USDT_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [BSC_RECIPIENT, rawAmount] },
+        {
+          onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); },
+          onError: (err) => { setTxStatus("failed"); setTxError(err.message || "Transaction failed to submit"); },
+        },
+      );
+    }
+  }
+
+  async function handleSolUsdtSpend() {
+    setTxError(null);
+    setTxStatus("sending");
+    setConfirmResult(null);
+    try {
+      const sig = await solanaWallet.sendSplToken(SOL_USDT_MINT, SOL_RECIPIENT, tokenAmount, 6);
+      setTxHash(sig);
+      setTxStatus("confirming");
+      await solanaWallet.confirmTx(sig);
+      setTxStatus("verifying");
+      const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 6, useGrouping: false });
+      confirmPurchase({
+        data: {
+          txHash: sig,
+          walletAddress: solanaWallet.publicKey ?? undefined,
+          purchaseType,
+          phoneNumber,
+          nairaAmount,
+          verseAmount: tokenAmountStr,
+          network: product?.name ?? "N/A",
+          dataPlan: selectedPlan?.label ?? undefined,
+          txUrl: EXPLORER_FOR_TOKEN.USDT_SOL(sig),
+          paymentToken: "USDT_SOL",
+        },
+      });
+    } catch (err) {
+      setTxStatus("failed");
+      setTxError(err instanceof Error ? err.message : "USDT (Solana) transfer failed");
     }
   }
 
@@ -544,10 +638,11 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     setTxStatus("verifying");
     setConfirmResult(null);
     const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 18, useGrouping: false });
+    const isSolanaToken = paymentToken === "SOL" || paymentToken === "USDT_SOL";
     confirmPurchase({
       data: {
         txHash: trimmedHash,
-        walletAddress: paymentToken === "SOL" ? (solanaWallet.publicKey ?? undefined) : (address ?? undefined),
+        walletAddress: isSolanaToken ? (solanaWallet.publicKey ?? undefined) : (address ?? undefined),
         purchaseType,
         phoneNumber,
         nairaAmount,
@@ -566,8 +661,21 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       const payLabel =
         paymentToken === "VERSE" ? "Pay with VERSE (Polygon)" :
         paymentToken === "USDT_POLYGON" ? "Pay with USDT (Polygon)" :
+        paymentToken === "USDT_BSC" ? "Pay with USDT (BEP20 / BSC)" :
         paymentToken === "SOL" ? "Pay with SOL (Solana)" :
+        paymentToken === "USDT_SOL" ? "Pay with USDT (Solana SPL)" :
         "Pay with eCash (XEC)";
+      const qrInstructions = (() => {
+        if (!tokenAmount) return "Scan or copy the address to send payment";
+        const fmt = (n: number, dp: number) => n.toLocaleString(undefined, { maximumFractionDigits: dp });
+        if (paymentToken === "VERSE") return `Scan or copy the address, then send ${fmt(tokenAmount, 4)} VERSE on Polygon`;
+        if (paymentToken === "USDT_POLYGON") return `Scan or copy the address, then send ${fmt(tokenAmount, 4)} USDT on Polygon`;
+        if (paymentToken === "USDT_BSC") return `Scan or copy the BSC address, then send ${fmt(tokenAmount, 4)} USDT (BEP20)`;
+        if (paymentToken === "SOL") return `Scan or copy the address, then send ${fmt(tokenAmount, 6)} SOL on Solana`;
+        if (paymentToken === "USDT_SOL") return `Scan or copy the Solana address, then send ${fmt(tokenAmount, 4)} USDT (SPL)`;
+        if (paymentToken === "ECASH") return `Scan or copy the address, then send ${fmt(tokenAmount, 2)} XEC`;
+        return "Scan or copy the address to send payment";
+      })();
       return (
         <>
           <div className="flex items-center gap-2">
@@ -598,23 +706,13 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                 {copied ? "Copied" : "Copy"}
               </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground text-center">
-              {paymentToken === "VERSE" && tokenAmount > 0
-                ? `Scan or copy the address, then send ${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} VERSE on Polygon`
-                : paymentToken === "USDT_POLYGON" && tokenAmount > 0
-                ? `Scan or copy the address, then send ${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} USDT on Polygon`
-                : paymentToken === "SOL" && tokenAmount > 0
-                ? `Scan or copy the address, then send ${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL on Solana`
-                : paymentToken === "ECASH" && tokenAmount > 0
-                ? `Scan or copy the address, then send ${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })} XEC`
-                : "Scan or copy the address to send payment"}
-            </p>
+            <p className="text-[10px] text-muted-foreground text-center">{qrInstructions}</p>
           </div>
         </>
       );
     }
 
-    // Desktop EVM flow (VERSE / USDT)
+    // Desktop EVM flow (VERSE / USDT Polygon)
     if (paymentToken === "VERSE" || paymentToken === "USDT_POLYGON") {
       return (
         <>
@@ -672,14 +770,54 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       );
     }
 
-    // Desktop SOL flow
-    if (paymentToken === "SOL") {
+    // Desktop EVM flow (USDT BEP20 / BSC)
+    if (paymentToken === "USDT_BSC") {
       return (
         <>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Wallet (Solana)</span>
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Wallet (BSC)</span>
+            </div>
+            {isConnected && <span className="text-[10px] text-muted-foreground font-mono">{shortAddress}</span>}
+          </div>
+          {!isConnected ? (
+            <Button
+              size="sm" variant="outline"
+              className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
+              onClick={connect} disabled={isConnecting || isBusy}
+            >
+              {isConnecting
+                ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Connecting…</>
+                : <><Wallet className="h-3 w-3 mr-1.5" />Connect Wallet</>}
+            </Button>
+          ) : !isOnBsc ? (
+            <Button
+              size="sm" variant="outline"
+              className="w-full h-8 text-xs border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:text-amber-400"
+              onClick={handleSwitchToBsc} disabled={isBusy}
+            >
+              <AlertTriangle className="h-3 w-3 mr-1.5" />Switch to BNB Smart Chain
+            </Button>
+          ) : (
+            <div className="text-[11px] text-[#06B6D4] flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#06B6D4] shrink-0" />
+              Connected to BNB Smart Chain
+            </div>
+          )}
+        </>
+      );
+    }
+
+    // Desktop SOL / USDT_SOL flow
+    if (paymentToken === "SOL" || paymentToken === "USDT_SOL") {
+      const chainLabel = paymentToken === "USDT_SOL" ? "Solana (USDT)" : "Solana";
+      return (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Wallet ({chainLabel})</span>
             </div>
             {solanaWallet.isConnected && solanaWallet.publicKey && (
               <span className="text-[10px] text-muted-foreground font-mono">
@@ -785,6 +923,31 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       );
     }
 
+    if (paymentToken === "USDT_BSC") {
+      const canSpend = isFormValid && isConnected && isOnBsc;
+      return (
+        <>
+          <Button
+            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            disabled={!canSpend || isBusy}
+            onClick={handleEVMSpend}
+          >
+            {isSending ? <><Loader2 className="h-4 w-4 animate-spin" />Awaiting wallet…</>
+              : isConfirming ? <><Loader2 className="h-4 w-4 animate-spin" />Confirming…</>
+              : isConfirmingBackend ? <><Loader2 className="h-4 w-4 animate-spin" />Verifying…</>
+              : isCompleted ? <><CheckCircle2 className="h-4 w-4 mr-1.5" />Confirmed</>
+              : <><Wallet className="h-4 w-4 mr-1.5" />Spend {tokenAmount > 0 ? `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} USDT` : ""}</>}
+          </Button>
+          {isConnected && !isOnBsc && (
+            <p className="text-[11px] text-amber-400/80 text-center">Switch your wallet to BNB Smart Chain to continue</p>
+          )}
+          {!isConnected && (
+            <p className="text-[11px] text-muted-foreground text-center">Connect your wallet to enable spending</p>
+          )}
+        </>
+      );
+    }
+
     if (paymentToken === "SOL") {
       const canSpend = isFormValid && solanaWallet.isConnected;
       return (
@@ -799,6 +962,28 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               : isConfirmingBackend ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />Verifying…</>
               : isCompleted ? <><CheckCircle2 className="h-4 w-4 mr-1.5" />Confirmed</>
               : <><Wallet className="h-4 w-4 mr-1.5" />Spend {tokenAmount > 0 ? `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL` : ""}</>}
+          </Button>
+          {!solanaWallet.isConnected && solanaWallet.hasProvider && (
+            <p className="text-[11px] text-muted-foreground text-center">Connect your Solana wallet to enable spending</p>
+          )}
+        </>
+      );
+    }
+
+    if (paymentToken === "USDT_SOL") {
+      const canSpend = isFormValid && solanaWallet.isConnected;
+      return (
+        <>
+          <Button
+            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            disabled={!canSpend || isBusy}
+            onClick={handleSolUsdtSpend}
+          >
+            {txStatus === "sending" ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />Awaiting wallet…</>
+              : txStatus === "confirming" ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />Confirming on Solana…</>
+              : isConfirmingBackend ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" />Verifying…</>
+              : isCompleted ? <><CheckCircle2 className="h-4 w-4 mr-1.5" />Confirmed</>
+              : <><Wallet className="h-4 w-4 mr-1.5" />Spend {tokenAmount > 0 ? `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} USDT` : ""}</>}
           </Button>
           {!solanaWallet.isConnected && solanaWallet.hasProvider && (
             <p className="text-[11px] text-muted-foreground text-center">Connect your Solana wallet to enable spending</p>
@@ -843,8 +1028,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             {/* ── Payment token selector ──────────────────────────────── */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Pay with</label>
-              <div className="grid grid-cols-4 gap-1.5">
-                {(["VERSE", "USDT_POLYGON", "SOL", "ECASH"] as PaymentToken[]).map((token) => (
+              <div className="grid grid-cols-3 gap-1.5">
+                {(["VERSE", "USDT_POLYGON", "USDT_BSC", "SOL", "USDT_SOL", "ECASH"] as PaymentToken[]).map((token) => (
                   <button
                     key={token}
                     type="button"
@@ -858,10 +1043,12 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
                   >
                     <span className="text-[11px] font-bold">{TOKEN_SYMBOLS[token]}</span>
-                    {token === "USDT_POLYGON" && <span className="text-[8px] opacity-60">Polygon</span>}
-                    {token === "SOL" && <span className="text-[8px] opacity-60">Solana</span>}
-                    {token === "ECASH" && <span className="text-[8px] opacity-60">XEC</span>}
                     {token === "VERSE" && <span className="text-[8px] opacity-60">Polygon</span>}
+                    {token === "USDT_POLYGON" && <span className="text-[8px] opacity-60">Polygon</span>}
+                    {token === "USDT_BSC" && <span className="text-[8px] opacity-60">BEP20</span>}
+                    {token === "SOL" && <span className="text-[8px] opacity-60">Solana</span>}
+                    {token === "USDT_SOL" && <span className="text-[8px] opacity-60">Solana SPL</span>}
+                    {token === "ECASH" && <span className="text-[8px] opacity-60">XEC</span>}
                   </button>
                 ))}
               </div>
@@ -1064,7 +1251,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                       <p className="text-xs font-bold text-[#06B6D4]">
                         {rateLoading
                           ? <span className="inline-flex items-center gap-1"><RefreshCw className="h-3 w-3 animate-spin" />Calculating…</span>
-                          : `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 6 : 4 })} ${tokenSymbol}`}
+                          : `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 6 : 4 })} ${tokenSymbol}${paymentToken === "USDT_BSC" ? " (BEP20)" : paymentToken === "USDT_SOL" ? " (SPL)" : ""}`}
                       </p>
                     </>
                   ) : (

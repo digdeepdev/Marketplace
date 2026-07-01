@@ -2,15 +2,15 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig, http } from "wagmi";
-import { polygon } from "wagmi/chains";
+import { polygon, bsc } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import App from "./App";
 import "./index.css";
 
 const wagmiConfig = createConfig({
-  chains: [polygon],
+  chains: [polygon, bsc],
   connectors: [injected()],
-  transports: { [polygon.id]: http() },
+  transports: { [polygon.id]: http(), [bsc.id]: http() },
 });
 
 const queryClient = new QueryClient();

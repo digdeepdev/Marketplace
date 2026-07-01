@@ -12,7 +12,7 @@ import { Badge } from "./ui/badge";
 import { Loader2, CheckCircle2, AlertTriangle, Smartphone, Database, Wallet } from "lucide-react";
 import type { Product } from "./product-card";
 
-export type PaymentToken = "VERSE" | "USDT_POLYGON" | "SOL" | "ECASH";
+export type PaymentToken = "VERSE" | "USDT_POLYGON" | "SOL" | "ECASH" | "USDT_BSC" | "USDT_SOL";
 
 interface FinalizeDetails {
   purchaseType: string;
@@ -43,8 +43,10 @@ function validateTxHash(hash: string, paymentToken: PaymentToken): boolean {
   switch (paymentToken) {
     case "VERSE":
     case "USDT_POLYGON":
+    case "USDT_BSC":
       return /^0x[0-9a-fA-F]{64}$/.test(trimmed);
     case "SOL":
+    case "USDT_SOL":
       return trimmed.length >= 44 && trimmed.length <= 100 && /^[A-Za-z0-9]+$/.test(trimmed);
     case "ECASH":
       return /^[0-9a-fA-F]{64}$/.test(trimmed);
@@ -57,8 +59,10 @@ function txHashPlaceholder(paymentToken: PaymentToken): string {
   switch (paymentToken) {
     case "VERSE":
     case "USDT_POLYGON":
+    case "USDT_BSC":
       return "0x…";
     case "SOL":
+    case "USDT_SOL":
       return "Solana transaction signature…";
     case "ECASH":
       return "eCash transaction ID (64 hex chars)…";
@@ -72,8 +76,12 @@ function txHashHint(paymentToken: PaymentToken): string {
     case "VERSE":
     case "USDT_POLYGON":
       return "Paste the Polygon transaction hash after sending payment";
+    case "USDT_BSC":
+      return "Paste the BSC transaction hash after sending payment";
     case "SOL":
       return "Paste the Solana transaction signature after sending payment";
+    case "USDT_SOL":
+      return "Paste the Solana transaction signature after sending USDT";
     case "ECASH":
       return "Paste the eCash (XEC) transaction ID after sending payment";
     default:
