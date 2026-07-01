@@ -27,7 +27,7 @@ const USDT_CONTRACT = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" as const;
 const BSC_USDT_CONTRACT = "0x55d398326f99059fF775485246999027B3197955" as const;
 const SOL_USDT_MINT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
 const POLYGON_RECIPIENT = ((import.meta.env.VITE_POLYGON_RECIPIENT as string | undefined) ?? "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7") as `0x${string}`;
-const BSC_RECIPIENT = ((import.meta.env.VITE_BSC_RECIPIENT as string | undefined) ?? "0xCF882686d0f8CCB72521C7Cd3A00cfcE63BCDcC7") as `0x${string}`;
+const BSC_RECIPIENT = ((import.meta.env.VITE_BSC_RECIPIENT as string | undefined) ?? "0x04D8ed7057Ab80c26EBF29609d3Ea65cdbe8E068") as `0x${string}`;
 const SOL_RECIPIENT = (import.meta.env.VITE_SOL_RECIPIENT as string | undefined) ?? "GrM8dS4hk8h92UPNqfdhZn4CG1TgYUQJYBXcj7AfaQmS";
 const XEC_RECIPIENT = (import.meta.env.VITE_XEC_RECIPIENT as string | undefined) ?? "ecash:qr6w9rxspfvnay2mtm3sxdxgls6fnvcf8sqzlcqly6";
 
