@@ -10,7 +10,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { QRCodeSVG } from "qrcode.react";
-import { Smartphone, Signal, Wallet, Loader2, RefreshCw, Database, AlertTriangle, ExternalLink, CheckCircle2, Copy, Check, ChevronDown } from "lucide-react";
+import { Smartphone, Signal, Wallet, Loader2, RefreshCw, Database, AlertTriangle, ExternalLink, CheckCircle2, Copy, Check, ChevronDown, ArrowLeft } from "lucide-react";
 import type { Product } from "./product-card";
 import { FinalizeModal, type PaymentToken } from "./finalize-modal";
 import { useWallet } from "@/hooks/use-wallet";
@@ -347,6 +347,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const [confirmResult, setConfirmResult] = useState<{ explorerUrl: string; emailSent: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
   const [showFinalize, setShowFinalize] = useState(false);
+  const [showQRStep, setShowQRStep] = useState(false);
 
   const isMobile = useIsMobile();
   const { address, chainId, isConnected, isConnecting, connect } = useWallet();
@@ -384,6 +385,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       setConfirmResult(null);
       setCopied(false);
       setShowFinalize(false);
+      setShowQRStep(false);
     }
   }, [open]);
 
@@ -405,6 +407,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     setTxHash(null);
     setTxError(null);
     setConfirmResult(null);
+    setShowQRStep(false);
   }, [paymentToken]);
 
   // Monitor chain confirmation (EVM tokens)
@@ -658,6 +661,16 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   // ── Wallet section renderer ────────────────────────────────────────────────
   function renderWalletSection() {
     if (showQRFlow) {
+      if (!showQRStep) {
+        return (
+          <div className="flex items-center gap-2">
+            <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              Manual / QR payment
+            </span>
+          </div>
+        );
+      }
       const payLabel =
         paymentToken === "VERSE" ? "Pay with VERSE (Polygon)" :
         paymentToken === "USDT_POLYGON" ? "Pay with USDT (Polygon)" :
@@ -678,8 +691,16 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       })();
       return (
         <>
-          <div className="flex items-center gap-2">
-            <Wallet className="h-3.5 w-3.5 text-[#06B6D4] shrink-0" />
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setShowQRStep(false)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Back to form"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back</span>
+            </button>
             <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
               {payLabel}
             </span>
@@ -883,6 +904,17 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   // ── Spend button renderer ──────────────────────────────────────────────────
   function renderSpendButton() {
     if (showQRFlow) {
+      if (!showQRStep) {
+        return (
+          <Button
+            className="w-full bg-[#06B6D4] text-black border-0 font-semibold h-11 hover:bg-[#0891B2]"
+            disabled={!isFormValid || isBusy}
+            onClick={() => { if (isFormValid) setShowQRStep(true); }}
+          >
+            View Payment QR →
+          </Button>
+        );
+      }
       return (
         <Button
           className="w-full bg-[#06B6D4] text-black border-0 font-semibold h-11 hover:bg-[#0891B2]"
@@ -1050,33 +1082,35 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             </DialogHeader>
 
             {/* ── Payment token selector ──────────────────────────────── */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Pay with</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {(["VERSE", "USDT_POLYGON", "USDT_BSC", "SOL", "USDT_SOL", "ECASH"] as PaymentToken[]).map((token) => (
-                  <button
-                    key={token}
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => !isBusy && setPaymentToken(token)}
-                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-[10px] font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
-                      paymentToken === token
-                        ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
-                        : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground hover:border-white/20"
-                    }`}
-                    style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
-                  >
-                    <span className="text-[11px] font-bold">{TOKEN_SYMBOLS[token]}</span>
-                    {token === "VERSE" && <span className="text-[8px] opacity-60">Polygon</span>}
-                    {token === "USDT_POLYGON" && <span className="text-[8px] opacity-60">Polygon</span>}
-                    {token === "USDT_BSC" && <span className="text-[8px] opacity-60">BEP20</span>}
-                    {token === "SOL" && <span className="text-[8px] opacity-60">Solana</span>}
-                    {token === "USDT_SOL" && <span className="text-[8px] opacity-60">Solana SPL</span>}
-                    {token === "ECASH" && <span className="text-[8px] opacity-60">XEC</span>}
-                  </button>
-                ))}
+            {!(showQRFlow && showQRStep) && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Pay with</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["VERSE", "USDT_POLYGON", "USDT_BSC", "SOL", "USDT_SOL", "ECASH"] as PaymentToken[]).map((token) => (
+                    <button
+                      key={token}
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => !isBusy && setPaymentToken(token)}
+                      className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg text-[10px] font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
+                        paymentToken === token
+                          ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
+                          : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground hover:border-white/20"
+                      }`}
+                      style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                    >
+                      <span className="text-[11px] font-bold">{TOKEN_SYMBOLS[token]}</span>
+                      {token === "VERSE" && <span className="text-[8px] opacity-60">Polygon</span>}
+                      {token === "USDT_POLYGON" && <span className="text-[8px] opacity-60">Polygon</span>}
+                      {token === "USDT_BSC" && <span className="text-[8px] opacity-60">BEP20</span>}
+                      {token === "SOL" && <span className="text-[8px] opacity-60">Solana</span>}
+                      {token === "USDT_SOL" && <span className="text-[8px] opacity-60">Solana SPL</span>}
+                      {token === "ECASH" && <span className="text-[8px] opacity-60">XEC</span>}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* ── Wallet / QR section ─────────────────────────────────── */}
             <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 space-y-2">
@@ -1129,140 +1163,145 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
               </div>
             )}
 
-            {/* ── Airtime / Data toggle ────────────────────────────────── */}
-            <div className="flex gap-2">
-              {(["airtime", "data"] as PurchaseType[]).map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => !isBusy && setPurchaseType(type)}
-                  disabled={isBusy}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all border cursor-pointer disabled:opacity-50 ${
-                    purchaseType === type
-                      ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
-                      : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground"
-                  }`}
-                  style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
-                >
-                  {type === "airtime" ? <Smartphone className="h-3.5 w-3.5" /> : <Signal className="h-3.5 w-3.5" />}
-                  {type === "airtime" ? "Airtime" : "Data"}
-                </button>
-              ))}
-            </div>
+            {/* ── Form fields (hidden during QR step) ──────────────────── */}
+            {!(showQRFlow && showQRStep) && (
+              <>
+                {/* ── Airtime / Data toggle ──────────────────────────── */}
+                <div className="flex gap-2">
+                  {(["airtime", "data"] as PurchaseType[]).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => !isBusy && setPurchaseType(type)}
+                      disabled={isBusy}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all border cursor-pointer disabled:opacity-50 ${
+                        purchaseType === type
+                          ? "bg-[#06B6D4]/15 border-[#06B6D4]/40 text-[#06B6D4]"
+                          : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground"
+                      }`}
+                      style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                    >
+                      {type === "airtime" ? <Smartphone className="h-3.5 w-3.5" /> : <Signal className="h-3.5 w-3.5" />}
+                      {type === "airtime" ? "Airtime" : "Data"}
+                    </button>
+                  ))}
+                </div>
 
-            {/* ── Phone number ─────────────────────────────────────────── */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Phone Number</label>
-              <Input
-                type="tel"
-                placeholder="08012345678"
-                value={phoneNumber}
-                onChange={(e) => !isBusy && setPhoneNumber(e.target.value.replace(/[^0-9]/g, ""))}
-                maxLength={11}
-                disabled={isBusy}
-                className="h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50"
-              />
-            </div>
-
-            {/* ── Data plan dropdown ───────────────────────────────────── */}
-            {purchaseType === "data" && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Data Plan</label>
-                <div className="rounded-lg border border-white/15 overflow-hidden" style={{ background: "hsl(240,10%,11%)" }}>
-                  <button
-                    type="button"
+                {/* ── Phone number ────────────────────────────────────── */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Phone Number</label>
+                  <Input
+                    type="tel"
+                    placeholder="08012345678"
+                    value={phoneNumber}
+                    onChange={(e) => !isBusy && setPhoneNumber(e.target.value.replace(/[^0-9]/g, ""))}
+                    maxLength={11}
                     disabled={isBusy}
-                    className="w-full flex items-center justify-between px-3 h-10 text-sm text-left disabled:opacity-50"
-                    style={{ background: "hsl(240,10%,11%)" }}
-                    onClick={() => { if (!isBusy) { if (selectedPlan) { setSelectedPlanId(""); setIsPlanOpen(true); } else { setIsPlanOpen((o) => !o); } } }}
-                  >
-                    <span className={selectedPlan ? "text-foreground" : "text-muted-foreground"}>
-                      {selectedPlan ? selectedPlan.label : "Choose a data plan"}
-                    </span>
-                    <ChevronDown className={`h-4 w-4 opacity-50 shrink-0 ml-2 transition-transform ${isPlanOpen && !selectedPlan ? "rotate-180" : ""}`} />
-                  </button>
-                  {isPlanOpen && !selectedPlan && (
-                    <div className="border-t border-white/10 max-h-[220px] overflow-y-auto overscroll-contain" style={{ background: "hsl(240,10%,9%)" }}>
-                      {(["daily", "weekly", "monthly"] as DataPlanCategory[])
-                        .filter((cat) => dataPlans.some((p) => p.category === cat))
-                        .map((cat) => (
-                          <div key={cat}>
-                            <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide sticky top-0" style={{ background: "hsl(240,10%,7%)" }}>
-                              {CATEGORY_LABELS[cat]}
-                            </div>
-                            {dataPlans.filter((p) => p.category === cat).map((plan) => (
-                              <button
-                                key={plan.id}
-                                type="button"
-                                disabled={isBusy}
-                                onClick={() => { if (!isBusy) { setSelectedPlanId(plan.id); setIsPlanOpen(false); } }}
-                                className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#06B6D4]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
-                                style={{ background: "hsl(240,10%,9%)" }}
-                              >
-                                <div className="flex flex-col leading-tight min-w-0">
-                                  <span className="text-xs font-medium">{plan.label}</span>
-                                  <span className="text-[10px] text-muted-foreground">{plan.dataValue} · {plan.validity}</span>
-                                </div>
-                                <span className="text-xs font-semibold text-[#06B6D4] shrink-0 ml-3">₦{plan.price.toLocaleString()}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                  {selectedPlan && (
-                    <div className="border-t border-white/10 px-3 py-2 flex items-center justify-between bg-[#06B6D4]/10">
-                      <div className="flex flex-col leading-tight min-w-0">
-                        <span className="text-[10px] text-[#06B6D4]/80">Selected</span>
-                        <span className="text-xs font-semibold text-[#06B6D4]">{selectedPlan.dataValue} · {selectedPlan.validity}</span>
-                      </div>
+                    className="h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50"
+                  />
+                </div>
+
+                {/* ── Data plan dropdown ──────────────────────────────── */}
+                {purchaseType === "data" && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Data Plan</label>
+                    <div className="rounded-lg border border-white/15 overflow-hidden" style={{ background: "hsl(240,10%,11%)" }}>
                       <button
-                        type="button" disabled={isBusy}
-                        onClick={() => !isBusy && setSelectedPlanId("")}
-                        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-3 disabled:opacity-50"
+                        type="button"
+                        disabled={isBusy}
+                        className="w-full flex items-center justify-between px-3 h-10 text-sm text-left disabled:opacity-50"
+                        style={{ background: "hsl(240,10%,11%)" }}
+                        onClick={() => { if (!isBusy) { if (selectedPlan) { setSelectedPlanId(""); setIsPlanOpen(true); } else { setIsPlanOpen((o) => !o); } } }}
                       >
-                        Change
+                        <span className={selectedPlan ? "text-foreground" : "text-muted-foreground"}>
+                          {selectedPlan ? selectedPlan.label : "Choose a data plan"}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 opacity-50 shrink-0 ml-2 transition-transform ${isPlanOpen && !selectedPlan ? "rotate-180" : ""}`} />
                       </button>
+                      {isPlanOpen && !selectedPlan && (
+                        <div className="border-t border-white/10 max-h-[220px] overflow-y-auto overscroll-contain" style={{ background: "hsl(240,10%,9%)" }}>
+                          {(["daily", "weekly", "monthly"] as DataPlanCategory[])
+                            .filter((cat) => dataPlans.some((p) => p.category === cat))
+                            .map((cat) => (
+                              <div key={cat}>
+                                <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide sticky top-0" style={{ background: "hsl(240,10%,7%)" }}>
+                                  {CATEGORY_LABELS[cat]}
+                                </div>
+                                {dataPlans.filter((p) => p.category === cat).map((plan) => (
+                                  <button
+                                    key={plan.id}
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => { if (!isBusy) { setSelectedPlanId(plan.id); setIsPlanOpen(false); } }}
+                                    className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-[#06B6D4]/10 transition-colors border-b border-white/5 last:border-0 disabled:opacity-50"
+                                    style={{ background: "hsl(240,10%,9%)" }}
+                                  >
+                                    <div className="flex flex-col leading-tight min-w-0">
+                                      <span className="text-xs font-medium">{plan.label}</span>
+                                      <span className="text-[10px] text-muted-foreground">{plan.dataValue} · {plan.validity}</span>
+                                    </div>
+                                    <span className="text-xs font-semibold text-[#06B6D4] shrink-0 ml-3">₦{plan.price.toLocaleString()}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                      {selectedPlan && (
+                        <div className="border-t border-white/10 px-3 py-2 flex items-center justify-between bg-[#06B6D4]/10">
+                          <div className="flex flex-col leading-tight min-w-0">
+                            <span className="text-[10px] text-[#06B6D4]/80">Selected</span>
+                            <span className="text-xs font-semibold text-[#06B6D4]">{selectedPlan.dataValue} · {selectedPlan.validity}</span>
+                          </div>
+                          <button
+                            type="button" disabled={isBusy}
+                            onClick={() => !isBusy && setSelectedPlanId("")}
+                            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-3 disabled:opacity-50"
+                          >
+                            Change
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            )}
+                  </div>
+                )}
 
-            {/* ── Data value display ───────────────────────────────────── */}
-            {purchaseType === "data" && selectedPlan && (
-              <div className="flex items-center gap-3 rounded-lg bg-[#06B6D4]/10 border border-[#06B6D4]/20 px-3 py-2.5">
-                <div className="h-8 w-8 rounded-lg bg-[#06B6D4]/20 flex items-center justify-center shrink-0">
-                  <Database className="h-4 w-4 text-[#06B6D4]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-[#06B6D4]/80">Data value</p>
-                  <p className="text-sm font-bold text-[#06B6D4]">{selectedPlan.dataValue}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-[10px] text-muted-foreground">Valid for</p>
-                  <p className="text-xs font-semibold text-white">{selectedPlan.validity}</p>
-                </div>
-              </div>
-            )}
+                {/* ── Data value display ──────────────────────────────── */}
+                {purchaseType === "data" && selectedPlan && (
+                  <div className="flex items-center gap-3 rounded-lg bg-[#06B6D4]/10 border border-[#06B6D4]/20 px-3 py-2.5">
+                    <div className="h-8 w-8 rounded-lg bg-[#06B6D4]/20 flex items-center justify-center shrink-0">
+                      <Database className="h-4 w-4 text-[#06B6D4]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] text-[#06B6D4]/80">Data value</p>
+                      <p className="text-sm font-bold text-[#06B6D4]">{selectedPlan.dataValue}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[10px] text-muted-foreground">Valid for</p>
+                      <p className="text-xs font-semibold text-white">{selectedPlan.validity}</p>
+                    </div>
+                  </div>
+                )}
 
-            {/* ── Amount input ─────────────────────────────────────────── */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">
-                {purchaseType === "data" && selectedPlan ? "Price (₦)" : "Amount (₦)"}
-              </label>
-              <Input
-                type="number"
-                placeholder={purchaseType === "data" ? "Select a plan" : "1000"}
-                value={amount}
-                onChange={(e) => { if (!isBusy && purchaseType === "airtime") setAmount(e.target.value); }}
-                readOnly={(purchaseType === "data" && !!selectedPlan) || isBusy}
-                min={100}
-                disabled={isBusy}
-                className={`h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50 ${purchaseType === "data" && selectedPlan ? "opacity-70 cursor-default" : ""}`}
-              />
-              {purchaseType === "airtime" && <p className="text-[10px] text-muted-foreground">Min: ₦100</p>}
-            </div>
+                {/* ── Amount input ─────────────────────────────────────── */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    {purchaseType === "data" && selectedPlan ? "Price (₦)" : "Amount (₦)"}
+                  </label>
+                  <Input
+                    type="number"
+                    placeholder={purchaseType === "data" ? "Select a plan" : "1000"}
+                    value={amount}
+                    onChange={(e) => { if (!isBusy && purchaseType === "airtime") setAmount(e.target.value); }}
+                    readOnly={(purchaseType === "data" && !!selectedPlan) || isBusy}
+                    min={100}
+                    disabled={isBusy}
+                    className={`h-10 bg-white/5 border-white/10 text-sm focus-visible:ring-[#06B6D4]/50 ${purchaseType === "data" && selectedPlan ? "opacity-70 cursor-default" : ""}`}
+                  />
+                  {purchaseType === "airtime" && <p className="text-[10px] text-muted-foreground">Min: ₦100</p>}
+                </div>
+              </>
+            )}
 
             {/* ── Rate info box ─────────────────────────────────────────── */}
             <div className="rounded-lg bg-[#06B6D4]/10 border border-[#06B6D4]/20 px-3 py-2 space-y-1">
@@ -1355,6 +1394,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
           setShowFinalize(false);
           if (txStatus === "completed" || txStatus === "failed") onClose();
         }}
+        onBack={() => setShowFinalize(false)}
         product={product}
         details={{
           purchaseType,

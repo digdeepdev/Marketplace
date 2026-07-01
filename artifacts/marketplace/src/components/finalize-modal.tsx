@@ -9,7 +9,7 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
-import { Loader2, CheckCircle2, AlertTriangle, Smartphone, Database, Wallet } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, Smartphone, Database, Wallet, ArrowLeft } from "lucide-react";
 import type { Product } from "./product-card";
 
 export type PaymentToken = "VERSE" | "USDT_POLYGON" | "SOL" | "ECASH" | "USDT_BSC" | "USDT_SOL";
@@ -27,6 +27,7 @@ interface FinalizeDetails {
 interface FinalizeModalProps {
   open: boolean;
   onClose: () => void;
+  onBack?: () => void;
   product: Product | null;
   details: FinalizeDetails;
   onConfirm: (txHash: string) => void;
@@ -92,6 +93,7 @@ function txHashHint(paymentToken: PaymentToken): string {
 export function FinalizeModal({
   open,
   onClose,
+  onBack,
   product,
   details,
   onConfirm,
@@ -155,7 +157,20 @@ export function FinalizeModal({
       <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-[420px] border-white/5 bg-card/95 backdrop-blur-xl p-0 overflow-hidden !rounded-xl shadow-2xl shadow-black/50">
         <div className="p-4 sm:p-5 space-y-4">
           <DialogHeader className="text-left space-y-0">
-            <DialogTitle className="text-base font-bold">Finalize Purchase</DialogTitle>
+            <div className="flex items-center gap-2">
+              {onBack && !isBusy && !isCompleted && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors shrink-0 -ml-0.5"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Back</span>
+                </button>
+              )}
+              <DialogTitle className="text-base font-bold">Finalize Purchase</DialogTitle>
+            </div>
             <DialogDescription className="sr-only">
               Enter your transaction hash to finalize the purchase
             </DialogDescription>
