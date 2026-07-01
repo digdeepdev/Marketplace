@@ -1260,9 +1260,34 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                             className="text-[#06B6D4]/60 hover:text-[#06B6D4] transition-colors"
                             onClick={() => {
                               const dp = paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 6 : 4;
-                              navigator.clipboard.writeText(tokenAmount.toLocaleString(undefined, { maximumFractionDigits: dp, useGrouping: false }));
-                              setCopied(true);
-                              setTimeout(() => setCopied(false), 2000);
+                              const text = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: dp, useGrouping: false });
+                              const doFallbackCopy = () => {
+                                try {
+                                  const ta = document.createElement("textarea");
+                                  ta.value = text;
+                                  ta.style.position = "fixed";
+                                  ta.style.top = "0";
+                                  ta.style.left = "0";
+                                  ta.style.opacity = "0";
+                                  document.body.appendChild(ta);
+                                  ta.focus();
+                                  ta.select();
+                                  document.execCommand("copy");
+                                  document.body.removeChild(ta);
+                                  setCopied(true);
+                                  setTimeout(() => setCopied(false), 2000);
+                                } catch {
+                                  // Copy not supported — user can long-press to copy the amount above
+                                }
+                              };
+                              if (navigator.clipboard && window.isSecureContext) {
+                                navigator.clipboard.writeText(text).then(() => {
+                                  setCopied(true);
+                                  setTimeout(() => setCopied(false), 2000);
+                                }).catch(doFallbackCopy);
+                              } else {
+                                doFallbackCopy();
+                              }
                             }}
                             title="Copy amount"
                           >
