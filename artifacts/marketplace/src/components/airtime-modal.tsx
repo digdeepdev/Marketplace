@@ -1248,11 +1248,28 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                   {nairaAmount > 0 ? (
                     <>
                       <p className="text-[10px] text-[#06B6D4]/80">You will pay</p>
-                      <p className="text-xs font-bold text-[#06B6D4]">
-                        {rateLoading
-                          ? <span className="inline-flex items-center gap-1"><RefreshCw className="h-3 w-3 animate-spin" />Calculating…</span>
-                          : `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 6 : 4 })} ${tokenSymbol}${paymentToken === "USDT_BSC" ? " (BEP20)" : paymentToken === "USDT_SOL" ? " (SPL)" : ""}`}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-[#06B6D4]">
+                          {rateLoading
+                            ? <span className="inline-flex items-center gap-1"><RefreshCw className="h-3 w-3 animate-spin" />Calculating…</span>
+                            : `${tokenAmount.toLocaleString(undefined, { maximumFractionDigits: paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 6 : 4 })} ${tokenSymbol}${paymentToken === "USDT_BSC" ? " (BEP20)" : paymentToken === "USDT_SOL" ? " (SPL)" : ""}`}
+                        </p>
+                        {!rateLoading && tokenAmount > 0 && (
+                          <button
+                            type="button"
+                            className="text-[#06B6D4]/60 hover:text-[#06B6D4] transition-colors"
+                            onClick={() => {
+                              const dp = paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 6 : 4;
+                              navigator.clipboard.writeText(tokenAmount.toLocaleString(undefined, { maximumFractionDigits: dp, useGrouping: false }));
+                              setCopied(true);
+                              setTimeout(() => setCopied(false), 2000);
+                            }}
+                            title="Copy amount"
+                          >
+                            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          </button>
+                        )}
+                      </div>
                     </>
                   ) : (
                     <p className="text-[10px] text-[#06B6D4]/80">
@@ -1294,11 +1311,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
           purchaseType,
           phoneNumber,
           nairaAmount: parseFloat(amount) || 0,
-          tokenAmount: tokenAmount.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-            useGrouping: false,
-          }),
+          tokenAmount: tokenAmount.toLocaleString(undefined, { maximumFractionDigits: paymentToken === "ECASH" ? 2 : paymentToken === "SOL" ? 6 : 4, useGrouping: false }),
           tokenSymbol,
           dataPlan: selectedPlan?.label,
           currency: product?.currency ?? "₦",
