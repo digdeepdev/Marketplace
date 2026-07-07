@@ -557,33 +557,42 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     setTxStatus("sending");
     setConfirmResult(null);
 
-    if (paymentToken === "VERSE") {
-      const rawAmount = parseUnits(safeTokenStr(tokenAmount, 8), 18);
-      writeContract(
-        { address: VERSE_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [POLYGON_RECIPIENT, rawAmount] },
-        {
-          onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); },
-          onError: (err) => { setTxStatus("failed"); setTxError(err.message || "Transaction failed to submit"); },
-        },
-      );
-    } else if (paymentToken === "USDT_POLYGON") {
-      const rawAmount = parseUnits(safeTokenStr(tokenAmount, 6), 6);
-      writeContract(
-        { address: USDT_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [POLYGON_RECIPIENT, rawAmount] },
-        {
-          onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); },
-          onError: (err) => { setTxStatus("failed"); setTxError(err.message || "Transaction failed to submit"); },
-        },
-      );
-    } else if (paymentToken === "USDT_BSC") {
-      const rawAmount = parseUnits(safeTokenStr(tokenAmount, 8), 18);
-      writeContract(
-        { address: BSC_USDT_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [BSC_RECIPIENT, rawAmount] },
-        {
-          onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); },
-          onError: (err) => { setTxStatus("failed"); setTxError(err.message || "Transaction failed to submit"); },
-        },
-      );
+    // Shared error handler — normalise viem/wagmi error messages for display
+    const onError = (err: Error) => {
+      console.error("[EVM spend error]", err);
+      // Viem wraps the root cause; prefer the short message if available
+      const raw = (err as unknown as { shortMessage?: string }).shortMessage ?? err.message ?? "Transaction failed to submit";
+      // Strip lengthy viem preamble (everything up to the first newline)
+      const first = raw.split("\n")[0].trim();
+      setTxStatus("failed");
+      setTxError(first || "Transaction failed to submit");
+    };
+
+    try {
+      if (paymentToken === "VERSE") {
+        const rawAmount = parseUnits(safeTokenStr(tokenAmount, 8), 18);
+        writeContract(
+          { address: VERSE_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [POLYGON_RECIPIENT, rawAmount], gas: 150000n },
+          { onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); }, onError },
+        );
+      } else if (paymentToken === "USDT_POLYGON") {
+        const rawAmount = parseUnits(safeTokenStr(tokenAmount, 6), 6);
+        writeContract(
+          { address: USDT_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [POLYGON_RECIPIENT, rawAmount], gas: 150000n },
+          { onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); }, onError },
+        );
+      } else if (paymentToken === "USDT_BSC") {
+        const rawAmount = parseUnits(safeTokenStr(tokenAmount, 8), 18);
+        writeContract(
+          { address: BSC_USDT_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [BSC_RECIPIENT, rawAmount], gas: 150000n },
+          { onSuccess: (hash) => { setTxHash(hash); setTxStatus("confirming"); }, onError },
+        );
+      }
+    } catch (syncErr) {
+      // Catches synchronous errors (e.g. parseUnits throwing on bad input)
+      console.error("[EVM spend sync error]", syncErr);
+      setTxStatus("failed");
+      setTxError(syncErr instanceof Error ? syncErr.message : "Failed to prepare transaction");
     }
   }
 

@@ -23,7 +23,10 @@ const wagmiConfig = createConfig({
       },
     }),
   ],
-  transports: { [polygon.id]: http(), [bsc.id]: http() },
+  transports: {
+    [polygon.id]: http("https://rpc.ankr.com/polygon"),
+    [bsc.id]: http("https://rpc.ankr.com/bsc"),
+  },
 });
 
 const queryClient = new QueryClient();
