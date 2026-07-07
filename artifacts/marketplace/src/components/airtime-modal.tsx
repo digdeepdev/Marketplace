@@ -416,7 +416,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       if (receipt.status === "success") {
         setTxStatus("verifying");
         const naira = parseFloat(amount) || 0;
-        const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 18, useGrouping: false });
+        const tokenAmountStr = safeTokenStr(tokenAmount, 8);
         confirmPurchase({
           data: {
             txHash,
@@ -482,6 +482,16 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       ? (parseFloat(eligibilityData.required) - parseFloat(eligibilityData.balance)).toLocaleString(undefined, { maximumFractionDigits: 2 })
       : null;
 
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  /**
+   * Convert a float to a locale-independent decimal string suitable for
+   * parseUnits / API fields. Always uses "." as the decimal separator and
+   * rounds to `maxDecimals` places, stripping trailing zeros.
+   */
+  function safeTokenStr(amount: number, maxDecimals: number): string {
+    return amount.toFixed(maxDecimals).replace(/\.?0+$/, "") || "0";
+  }
+
   // ── Handlers ───────────────────────────────────────────────────────────────
   type EthWindow = { ethereum?: { request(args: { method: string; params?: unknown[] }): Promise<unknown> } };
 
@@ -541,10 +551,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     setTxStatus("sending");
     setConfirmResult(null);
 
-    const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 18, useGrouping: false });
-
     if (paymentToken === "VERSE") {
-      const rawAmount = parseUnits(tokenAmountStr, 18);
+      const rawAmount = parseUnits(safeTokenStr(tokenAmount, 8), 18);
       writeContract(
         { address: VERSE_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [POLYGON_RECIPIENT, rawAmount] },
         {
@@ -553,7 +561,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
         },
       );
     } else if (paymentToken === "USDT_POLYGON") {
-      const rawAmount = parseUnits(tokenAmountStr, 6);
+      const rawAmount = parseUnits(safeTokenStr(tokenAmount, 6), 6);
       writeContract(
         { address: USDT_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [POLYGON_RECIPIENT, rawAmount] },
         {
@@ -562,7 +570,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
         },
       );
     } else if (paymentToken === "USDT_BSC") {
-      const rawAmount = parseUnits(tokenAmountStr, 18);
+      const rawAmount = parseUnits(safeTokenStr(tokenAmount, 8), 18);
       writeContract(
         { address: BSC_USDT_CONTRACT, abi: erc20Abi, functionName: "transfer", args: [BSC_RECIPIENT, rawAmount] },
         {
@@ -583,7 +591,6 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       setTxStatus("confirming");
       await solanaWallet.confirmTx(sig);
       setTxStatus("verifying");
-      const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 6, useGrouping: false });
       confirmPurchase({
         data: {
           txHash: sig,
@@ -591,7 +598,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
           purchaseType,
           phoneNumber,
           nairaAmount,
-          verseAmount: tokenAmountStr,
+          verseAmount: safeTokenStr(tokenAmount, 6),
           network: product?.name ?? "N/A",
           dataPlan: selectedPlan?.label ?? undefined,
           txUrl: EXPLORER_FOR_TOKEN.USDT_SOL(sig),
@@ -614,7 +621,6 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       setTxStatus("confirming");
       await solanaWallet.confirmTx(sig);
       setTxStatus("verifying");
-      const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 9, useGrouping: false });
       confirmPurchase({
         data: {
           txHash: sig,
@@ -622,7 +628,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
           purchaseType,
           phoneNumber,
           nairaAmount,
-          verseAmount: tokenAmountStr,
+          verseAmount: safeTokenStr(tokenAmount, 9),
           network: product?.name ?? "N/A",
           dataPlan: selectedPlan?.label ?? undefined,
           txUrl: EXPLORER_FOR_TOKEN.SOL(sig),
@@ -640,7 +646,10 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     setTxHash(trimmedHash);
     setTxStatus("verifying");
     setConfirmResult(null);
-    const tokenAmountStr = tokenAmount.toLocaleString(undefined, { maximumFractionDigits: 18, useGrouping: false });
+    const solanaDecimalsMap = { SOL: 9, USDT_SOL: 6 } as Partial<Record<PaymentToken, number>>;
+    const evmDecimalsMap = { VERSE: 8, USDT_POLYGON: 6, USDT_BSC: 8, ECASH: 8 } as Partial<Record<PaymentToken, number>>;
+    const maxDec = solanaDecimalsMap[paymentToken] ?? evmDecimalsMap[paymentToken] ?? 8;
+    const tokenAmountStr = safeTokenStr(tokenAmount, maxDec);
     const isSolanaToken = paymentToken === "SOL" || paymentToken === "USDT_SOL";
     confirmPurchase({
       data: {
