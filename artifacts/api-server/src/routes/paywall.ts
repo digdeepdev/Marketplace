@@ -51,7 +51,12 @@ const BSC_RPCS = [
   "https://bsc-dataseed1.defibit.io",
   "https://bsc.publicnode.com",
 ];
-const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
+const SOLANA_RPCS = [
+  "https://api.mainnet-beta.solana.com",
+  "https://solana.publicnode.com",
+  "https://rpc.ankr.com/solana",
+  "https://solana.drpc.org",
+];
 const VERSE_DECIMALS = 18n;
 const REQUIRED_VERSE = 2_000n * 10n ** VERSE_DECIMALS;
 const REQUIRED_VERSE_DISPLAY = "2000";
@@ -281,53 +286,72 @@ async function verifyPolygonErc20Tx(txHash: string, tokenContract: string, log?:
   return matched;
 }
 
-async function verifySolanaTx(txSignature: string): Promise<boolean> {
-  try {
-    const res = await fetch(SOLANA_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", id: 1,
-        method: "getTransaction",
-        params: [txSignature, { encoding: "json", maxSupportedTransactionVersion: 0 }],
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return false;
-    const data = (await res.json()) as {
-      result?: {
-        meta?: {
-          err?: unknown;
-          preBalances?: number[];
-          postBalances?: number[];
-        };
-        transaction?: {
-          message?: {
-            accountKeys?: string[];
-          };
-        };
-      } | null;
-    };
-    if (!data.result) return false;
-
-    const meta = data.result.meta;
-    const message = data.result.transaction?.message;
-
-    // Tx must have succeeded (no error)
-    if (meta?.err != null) return false;
-
-    // Validate the recipient address received SOL
-    const accountKeys = message?.accountKeys ?? [];
-    const recipientIndex = accountKeys.findIndex((k) => k === SOL_RECIPIENT_ADDRESS);
-    if (recipientIndex === -1) return false;
-
-    const pre = meta?.preBalances?.[recipientIndex] ?? 0;
-    const post = meta?.postBalances?.[recipientIndex] ?? 0;
-    // Recipient must have a positive balance increase
-    return post > pre;
-  } catch {
-    return false;
+async function solanaGetTransaction(txSignature: string, encoding: "json" | "jsonParsed"): Promise<unknown> {
+  for (const rpc of SOLANA_RPCS) {
+    try {
+      const res = await fetch(rpc, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", id: 1,
+          method: "getTransaction",
+          params: [txSignature, { encoding, commitment: "confirmed", maxSupportedTransactionVersion: 0 }],
+        }),
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!res.ok) continue;
+      const data = (await res.json()) as { result?: unknown; error?: unknown };
+      if (data.error) continue;
+      if (data.result !== null && data.result !== undefined) return data.result;
+    } catch {
+      continue;
+    }
   }
+  return null;
+}
+
+async function verifySolanaTx(txSignature: string, log?: import("pino").Logger): Promise<boolean> {
+  // Retry up to 4 times with backoff — tx may be confirmed but not yet indexed
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 2_000));
+    try {
+      const result = await solanaGetTransaction(txSignature, "json") as {
+        meta?: { err?: unknown; preBalances?: number[]; postBalances?: number[] };
+        transaction?: { message?: { accountKeys?: string[] } };
+      } | null;
+
+      if (!result) {
+        log?.warn({ txSignature, attempt }, "verifySolanaTx: getTransaction returned null, will retry");
+        continue;
+      }
+
+      // Tx must have succeeded
+      if (result.meta?.err != null) {
+        log?.warn({ txSignature, err: result.meta.err }, "verifySolanaTx: tx has error field set");
+        return false;
+      }
+
+      // Recipient must appear in account keys with a positive balance increase
+      const accountKeys = result.transaction?.message?.accountKeys ?? [];
+      const recipientIndex = accountKeys.findIndex((k) => k === SOL_RECIPIENT_ADDRESS);
+      if (recipientIndex === -1) {
+        log?.warn({ txSignature, SOL_RECIPIENT_ADDRESS, accountKeys }, "verifySolanaTx: recipient not found in accountKeys");
+        return false;
+      }
+
+      const pre = result.meta?.preBalances?.[recipientIndex] ?? 0;
+      const post = result.meta?.postBalances?.[recipientIndex] ?? 0;
+      if (post <= pre) {
+        log?.warn({ txSignature, pre, post }, "verifySolanaTx: recipient balance did not increase");
+        return false;
+      }
+      return true;
+    } catch (err) {
+      log?.warn({ err, txSignature, attempt }, "verifySolanaTx: exception, will retry");
+    }
+  }
+  log?.warn({ txSignature }, "verifySolanaTx: all retries exhausted, returning false");
+  return false;
 }
 
 // Fields that verifyEcashTx depends on are required so that any Blockchair
@@ -414,62 +438,50 @@ async function verifyBscUsdtTx(txHash: string, expectedRawAmount: bigint, log?: 
 }
 
 async function verifySolanaUsdtTx(txSignature: string, expectedRawAmount: bigint, log?: import("pino").Logger): Promise<boolean> {
-  try {
-    const res = await fetch(SOLANA_RPC, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", id: 1,
-        method: "getTransaction",
-        params: [txSignature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0 }],
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return false;
-    const data = (await res.json()) as {
-      result?: {
-        meta?: {
-          err?: unknown;
-          preTokenBalances?: Array<{ mint?: string; owner?: string; uiTokenAmount?: { amount?: string; uiAmount?: number | null } }>;
-          postTokenBalances?: Array<{ mint?: string; owner?: string; uiTokenAmount?: { amount?: string; uiAmount?: number | null } }>;
-        };
-      } | null;
-    };
-    if (!data.result) return false;
-    if (data.result.meta?.err != null) return false;
+  type TokenBalance = { mint?: string; owner?: string; uiTokenAmount?: { amount?: string } };
+  type TxResult = { meta?: { err?: unknown; preTokenBalances?: TokenBalance[]; postTokenBalances?: TokenBalance[] } };
 
-    const preBalances = data.result.meta?.preTokenBalances ?? [];
-    const postBalances = data.result.meta?.postTokenBalances ?? [];
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 2_000));
+    try {
+      const result = await solanaGetTransaction(txSignature, "jsonParsed") as TxResult | null;
 
-    // Find the recipient's USDT entry in postTokenBalances
-    const postEntry = postBalances.find(
-      (b) => b.mint === SOL_USDT_MINT && b.owner === SOL_RECIPIENT_ADDRESS
-    );
-    if (!postEntry) {
-      log?.warn({ txSignature, SOL_RECIPIENT_ADDRESS, SOL_USDT_MINT },
-        "verifySolanaUsdtTx: recipient USDT entry not found in postTokenBalances");
-      return false;
+      if (!result) {
+        log?.warn({ txSignature, attempt }, "verifySolanaUsdtTx: getTransaction returned null, will retry");
+        continue;
+      }
+      if (result.meta?.err != null) {
+        log?.warn({ txSignature, err: result.meta.err }, "verifySolanaUsdtTx: tx has error field set");
+        return false;
+      }
+
+      const preBalances = result.meta?.preTokenBalances ?? [];
+      const postBalances = result.meta?.postTokenBalances ?? [];
+
+      const postEntry = postBalances.find((b) => b.mint === SOL_USDT_MINT && b.owner === SOL_RECIPIENT_ADDRESS);
+      if (!postEntry) {
+        log?.warn({ txSignature, SOL_RECIPIENT_ADDRESS, SOL_USDT_MINT },
+          "verifySolanaUsdtTx: recipient USDT entry not found in postTokenBalances");
+        return false;
+      }
+
+      const postRaw = BigInt(postEntry.uiTokenAmount?.amount ?? "0");
+      const preEntry = preBalances.find((b) => b.mint === SOL_USDT_MINT && b.owner === SOL_RECIPIENT_ADDRESS);
+      const preRaw = BigInt(preEntry?.uiTokenAmount?.amount ?? "0");
+
+      const delta = postRaw > preRaw ? postRaw - preRaw : 0n;
+      const amountOk = delta >= expectedRawAmount;
+      if (!amountOk) {
+        log?.warn({ txSignature, delta: delta.toString(), expectedRawAmount: expectedRawAmount.toString() },
+          "verifySolanaUsdtTx: received USDT amount is less than expected");
+      }
+      return amountOk;
+    } catch (err) {
+      log?.warn({ err, txSignature, attempt }, "verifySolanaUsdtTx: exception, will retry");
     }
-    // Use integer string amount (not float uiAmount) to avoid precision loss
-    const postRaw = BigInt(postEntry.uiTokenAmount?.amount ?? "0");
-
-    // Find corresponding preBalance entry
-    const preEntry = preBalances.find(
-      (b) => b.mint === SOL_USDT_MINT && b.owner === SOL_RECIPIENT_ADDRESS
-    );
-    const preRaw = BigInt(preEntry?.uiTokenAmount?.amount ?? "0");
-
-    const delta = postRaw > preRaw ? postRaw - preRaw : 0n;
-    const amountOk = delta >= expectedRawAmount;
-    if (!amountOk) {
-      log?.warn({ txSignature, delta: delta.toString(), expectedRawAmount: expectedRawAmount.toString() },
-        "verifySolanaUsdtTx: received USDT amount is less than expected");
-    }
-    return amountOk;
-  } catch (err) {
-    log?.warn({ err, txSignature }, "verifySolanaUsdtTx: exception during verification");
-    return false;
   }
+  log?.warn({ txSignature }, "verifySolanaUsdtTx: all retries exhausted, returning false");
+  return false;
 }
 
 async function verifyEcashTx(txid: string): Promise<boolean> {
@@ -585,7 +597,7 @@ router.post("/paywall/confirm-purchase", async (req: Request, res: Response): Pr
         break;
       }
       case "SOL":
-        confirmed = await verifySolanaTx(body.txHash);
+        confirmed = await verifySolanaTx(body.txHash, req.log);
         break;
       case "USDT_SOL": {
         // Solana SPL USDT has 6 decimals
