@@ -443,6 +443,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     if (confirmData && txStatus === "verifying") {
       setTxStatus("completed");
       setConfirmResult({ explorerUrl: confirmData.explorerUrl, emailSent: confirmData.emailSent });
+      setShowFinalize(true);
     }
   }, [confirmData]);
 
