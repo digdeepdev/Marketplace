@@ -351,7 +351,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const [mobileUseWallet, setMobileUseWallet] = useState(false);
 
   const isMobile = useIsMobile();
-  const { address, chainId, isConnected, isConnecting, connect } = useWallet();
+  const { address, chainId, isConnected, isConnecting, connect, connectWC } = useWallet();
+  const handleConnect = () => (isMobile && mobileUseWallet ? connectWC() : connect());
   const solanaWallet = useSolanaWallet();
   const dataPlans = NETWORK_DATA_PLANS[product?.name ?? ""] ?? [];
   const selectedPlan = dataPlans.find((p) => p.id === selectedPlanId);
@@ -786,7 +787,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             <Button
               size="sm" variant="outline"
               className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
-              onClick={connect} disabled={isConnecting || isBusy}
+              onClick={handleConnect} disabled={isConnecting || isBusy}
             >
               {isConnecting
                 ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Connecting…</>
@@ -844,7 +845,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             <Button
               size="sm" variant="outline"
               className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
-              onClick={connect} disabled={isConnecting || isBusy}
+              onClick={handleConnect} disabled={isConnecting || isBusy}
             >
               {isConnecting
                 ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Connecting…</>

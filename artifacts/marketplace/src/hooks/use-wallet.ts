@@ -1,5 +1,7 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { injected, walletConnect } from "wagmi/connectors";
+
+const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID as string;
 
 export function useWallet() {
   const { address, chainId, isConnected, isConnecting } = useAccount();
@@ -12,6 +14,7 @@ export function useWallet() {
     isConnected,
     isConnecting,
     connect: () => connect({ connector: injected() }),
+    connectWC: () => connect({ connector: walletConnect({ projectId }) }),
     disconnect,
   };
 }
