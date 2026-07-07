@@ -351,7 +351,6 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const [mobileUseWallet, setMobileUseWallet] = useState(false);
 
   const isMobile = useIsMobile();
-  const hasEvmProvider = typeof window !== "undefined" && !!(window as unknown as { ethereum?: unknown }).ethereum;
   const { address, chainId, isConnected, isConnecting, connect } = useWallet();
   const solanaWallet = useSolanaWallet();
   const dataPlans = NETWORK_DATA_PLANS[product?.name ?? ""] ?? [];
@@ -772,9 +771,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       );
     }
 
-    // EVM flow (VERSE / USDT Polygon)
+    // Desktop EVM flow (VERSE / USDT Polygon)
     if (paymentToken === "VERSE" || paymentToken === "USDT_POLYGON") {
-      const dappUrl = typeof window !== "undefined" ? window.location.href : "";
       return (
         <>
           <div className="flex items-center justify-between gap-2">
@@ -784,23 +782,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             </div>
             {isConnected && <span className="text-[10px] text-muted-foreground font-mono">{shortAddress}</span>}
           </div>
-          {isMobile && !hasEvmProvider && !isConnected ? (
-            <div className="space-y-1.5">
-              <p className="text-[11px] text-muted-foreground text-center">Open this page inside your wallet's browser:</p>
-              <a
-                href={`https://metamask.app.link/dapp/${typeof window !== "undefined" ? window.location.host : ""}`}
-                className="flex items-center justify-center gap-1.5 w-full h-8 text-xs font-medium rounded-md border border-orange-400/40 text-orange-300 hover:bg-orange-400/10 transition-colors"
-              >
-                <Wallet className="h-3 w-3" />Open in MetaMask
-              </a>
-              <a
-                href={`https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(dappUrl)}`}
-                className="flex items-center justify-center gap-1.5 w-full h-8 text-xs font-medium rounded-md border border-sky-400/40 text-sky-300 hover:bg-sky-400/10 transition-colors"
-              >
-                <Wallet className="h-3 w-3" />Open in Trust Wallet
-              </a>
-            </div>
-          ) : !isConnected ? (
+          {!isConnected ? (
             <Button
               size="sm" variant="outline"
               className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
@@ -847,9 +829,8 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       );
     }
 
-    // EVM flow (USDT BEP20 / BSC)
+    // Desktop EVM flow (USDT BEP20 / BSC)
     if (paymentToken === "USDT_BSC") {
-      const dappUrl = typeof window !== "undefined" ? window.location.href : "";
       return (
         <>
           <div className="flex items-center justify-between gap-2">
@@ -859,23 +840,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             </div>
             {isConnected && <span className="text-[10px] text-muted-foreground font-mono">{shortAddress}</span>}
           </div>
-          {isMobile && !hasEvmProvider && !isConnected ? (
-            <div className="space-y-1.5">
-              <p className="text-[11px] text-muted-foreground text-center">Open this page inside your wallet's browser:</p>
-              <a
-                href={`https://metamask.app.link/dapp/${typeof window !== "undefined" ? window.location.host : ""}`}
-                className="flex items-center justify-center gap-1.5 w-full h-8 text-xs font-medium rounded-md border border-orange-400/40 text-orange-300 hover:bg-orange-400/10 transition-colors"
-              >
-                <Wallet className="h-3 w-3" />Open in MetaMask
-              </a>
-              <a
-                href={`https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(dappUrl)}`}
-                className="flex items-center justify-center gap-1.5 w-full h-8 text-xs font-medium rounded-md border border-sky-400/40 text-sky-300 hover:bg-sky-400/10 transition-colors"
-              >
-                <Wallet className="h-3 w-3" />Open in Trust Wallet
-              </a>
-            </div>
-          ) : !isConnected ? (
+          {!isConnected ? (
             <Button
               size="sm" variant="outline"
               className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
@@ -920,25 +885,13 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
             )}
           </div>
           {!solanaWallet.hasProvider ? (
-            isMobile ? (
-              <div className="space-y-1.5">
-                <p className="text-[11px] text-muted-foreground text-center">Open this page inside your wallet's browser:</p>
-                <a
-                  href={`https://phantom.app/ul/browse/${encodeURIComponent(typeof window !== "undefined" ? window.location.href : "")}?ref=${encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "")}`}
-                  className="flex items-center justify-center gap-1.5 w-full h-8 text-xs font-medium rounded-md border border-purple-400/40 text-purple-300 hover:bg-purple-400/10 transition-colors"
-                >
-                  <Wallet className="h-3 w-3" />Open in Phantom
-                </a>
-              </div>
-            ) : (
-              <Button
-                size="sm" variant="outline"
-                className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
-                onClick={() => window.open("https://phantom.app/", "_blank")}
-              >
-                <Wallet className="h-3 w-3 mr-1.5" />Install Phantom / Solflare
-              </Button>
-            )
+            <Button
+              size="sm" variant="outline"
+              className="w-full h-8 text-xs border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 hover:text-[#06B6D4]"
+              onClick={() => window.open("https://phantom.app/", "_blank")}
+            >
+              <Wallet className="h-3 w-3 mr-1.5" />Install Phantom / Solflare
+            </Button>
           ) : !solanaWallet.isConnected ? (
             <Button
               size="sm" variant="outline"
