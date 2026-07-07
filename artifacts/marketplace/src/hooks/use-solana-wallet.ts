@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 
-const SOL_RPC = "https://api.mainnet-beta.solana.com";
+const SOL_RPCS = [
+  "https://api.mainnet-beta.solana.com",
+  "https://rpc.ankr.com/solana",
+  "https://solana-mainnet.rpc.extrnode.com",
+  "https://solana.drpc.org",
+];
 
 interface PhantomProvider {
   isPhantom?: boolean;
@@ -23,6 +28,20 @@ function getProvider(): PhantomProvider | null {
   if (w.solana?.isPhantom) return w.solana;
   if (w.solflare?.isSolflare) return w.solflare;
   return null;
+}
+
+async function getWorkingConnection() {
+  const { Connection } = await import("@solana/web3.js");
+  for (const rpc of SOL_RPCS) {
+    try {
+      const conn = new Connection(rpc, "confirmed");
+      await conn.getLatestBlockhash();
+      return conn;
+    } catch {
+      // try next
+    }
+  }
+  throw new Error("All Solana RPC endpoints failed to get a recent blockhash. Please try again.");
 }
 
 export interface SolanaWalletState {
@@ -82,11 +101,11 @@ export function useSolanaWallet(): SolanaWalletState {
   }, []);
 
   const sendSol = useCallback(async (recipient: string, amountSol: number): Promise<string> => {
-    const { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
+    const { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } = await import("@solana/web3.js");
     const provider = getProvider();
     if (!provider || !publicKey) throw new Error("Solana wallet not connected");
 
-    const connection = new Connection(SOL_RPC, "confirmed");
+    const connection = await getWorkingConnection();
     const fromPubkey = new PublicKey(publicKey);
     const toPubkey = new PublicKey(recipient);
     const lamports = Math.round(amountSol * LAMPORTS_PER_SOL);
@@ -109,7 +128,7 @@ export function useSolanaWallet(): SolanaWalletState {
     amount: number,
     decimals: number,
   ): Promise<string> => {
-    const { Connection, PublicKey, Transaction } = await import("@solana/web3.js");
+    const { PublicKey, Transaction } = await import("@solana/web3.js");
     const {
       getAssociatedTokenAddress,
       createTransferInstruction,
@@ -119,7 +138,7 @@ export function useSolanaWallet(): SolanaWalletState {
     const provider = getProvider();
     if (!provider || !publicKey) throw new Error("Solana wallet not connected");
 
-    const connection = new Connection(SOL_RPC, "confirmed");
+    const connection = await getWorkingConnection();
     const fromPubkey = new PublicKey(publicKey);
     const mintPubkey = new PublicKey(mintAddress);
     const toPubkey = new PublicKey(recipient);
@@ -153,8 +172,7 @@ export function useSolanaWallet(): SolanaWalletState {
   }, [publicKey]);
 
   const confirmTx = useCallback(async (sig: string, timeoutMs = 60_000): Promise<void> => {
-    const { Connection } = await import("@solana/web3.js");
-    const connection = new Connection(SOL_RPC, "confirmed");
+    const connection = await getWorkingConnection();
 
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
