@@ -13,7 +13,15 @@ const wagmiConfig = createConfig({
   chains: [polygon, bsc],
   connectors: [
     injected(),
-    walletConnect({ projectId }),
+    walletConnect({
+      projectId,
+      metadata: {
+        name: "Subrefill",
+        description: "Buy airtime and data with crypto",
+        url: window.location.origin,
+        icons: [`${window.location.origin}/favicon.png`],
+      },
+    }),
   ],
   transports: { [polygon.id]: http(), [bsc.id]: http() },
 });
