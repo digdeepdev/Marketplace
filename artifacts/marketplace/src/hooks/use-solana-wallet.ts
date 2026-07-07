@@ -1,12 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 
-const SOL_RPCS = [
-  "https://api.mainnet-beta.solana.com",
-  "https://rpc.ankr.com/solana",
-  "https://solana-mainnet.rpc.extrnode.com",
-  "https://solana.drpc.org",
-];
-
 interface PhantomProvider {
   isPhantom?: boolean;
   isSolflare?: boolean;
@@ -30,18 +23,24 @@ function getProvider(): PhantomProvider | null {
   return null;
 }
 
-async function getWorkingConnection() {
-  const { Connection } = await import("@solana/web3.js");
-  for (const rpc of SOL_RPCS) {
-    try {
-      const conn = new Connection(rpc, "confirmed");
-      await conn.getLatestBlockhash();
-      return conn;
-    } catch {
-      // try next
-    }
+async function getBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: number }> {
+  const res = await fetch("/api/solana/blockhash");
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? "Failed to get Solana blockhash");
   }
-  throw new Error("All Solana RPC endpoints failed to get a recent blockhash. Please try again.");
+  return res.json() as Promise<{ blockhash: string; lastValidBlockHeight: number }>;
+}
+
+async function sendTransaction(serializedBase64: string): Promise<string> {
+  const res = await fetch("/api/solana/send-transaction", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transaction: serializedBase64 }),
+  });
+  const body = (await res.json()) as { signature?: string; error?: string };
+  if (!res.ok || !body.signature) throw new Error(body.error ?? "Failed to submit Solana transaction");
+  return body.signature as string;
 }
 
 export interface SolanaWalletState {
@@ -105,12 +104,11 @@ export function useSolanaWallet(): SolanaWalletState {
     const provider = getProvider();
     if (!provider || !publicKey) throw new Error("Solana wallet not connected");
 
-    const connection = await getWorkingConnection();
+    const { blockhash } = await getBlockhash();
     const fromPubkey = new PublicKey(publicKey);
     const toPubkey = new PublicKey(recipient);
     const lamports = Math.round(amountSol * LAMPORTS_PER_SOL);
 
-    const { blockhash } = await connection.getLatestBlockhash();
     const tx = new Transaction();
     tx.add(SystemProgram.transfer({ fromPubkey, toPubkey, lamports: BigInt(lamports) }));
     tx.recentBlockhash = blockhash;
@@ -118,8 +116,8 @@ export function useSolanaWallet(): SolanaWalletState {
 
     const signed = await provider.signTransaction(tx);
     const raw = (signed as { serialize(): Uint8Array }).serialize();
-    const sig = await connection.sendRawTransaction(raw);
-    return sig;
+    const base64 = btoa(String.fromCharCode(...raw));
+    return sendTransaction(base64);
   }, [publicKey]);
 
   const sendSplToken = useCallback(async (
@@ -138,7 +136,7 @@ export function useSolanaWallet(): SolanaWalletState {
     const provider = getProvider();
     if (!provider || !publicKey) throw new Error("Solana wallet not connected");
 
-    const connection = await getWorkingConnection();
+    const { blockhash } = await getBlockhash();
     const fromPubkey = new PublicKey(publicKey);
     const mintPubkey = new PublicKey(mintAddress);
     const toPubkey = new PublicKey(recipient);
@@ -148,7 +146,6 @@ export function useSolanaWallet(): SolanaWalletState {
 
     const rawAmount = BigInt(Math.round(amount * 10 ** decimals));
 
-    const { blockhash } = await connection.getLatestBlockhash();
     const tx = new Transaction();
     tx.recentBlockhash = blockhash;
     tx.feePayer = fromPubkey;
@@ -167,19 +164,19 @@ export function useSolanaWallet(): SolanaWalletState {
 
     const signed = await provider.signTransaction(tx);
     const raw = (signed as { serialize(): Uint8Array }).serialize();
-    const sig = await connection.sendRawTransaction(raw);
-    return sig;
+    const base64 = btoa(String.fromCharCode(...raw));
+    return sendTransaction(base64);
   }, [publicKey]);
 
   const confirmTx = useCallback(async (sig: string, timeoutMs = 60_000): Promise<void> => {
-    const connection = await getWorkingConnection();
-
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-      const status = await connection.getSignatureStatus(sig, { searchTransactionHistory: true });
-      const conf = status.value?.confirmationStatus;
-      if (conf === "confirmed" || conf === "finalized") return;
-      if (status.value?.err) throw new Error("Transaction failed on Solana network");
+      const res = await fetch(`/api/solana/confirm/${encodeURIComponent(sig)}`);
+      if (res.ok) {
+        const body = (await res.json()) as { status: string; error?: string };
+        if (body.status === "confirmed" || body.status === "finalized") return;
+        if (body.status === "failed") throw new Error("Transaction failed on Solana network");
+      }
       await new Promise((r) => setTimeout(r, 2_500));
     }
     throw new Error("Solana transaction confirmation timed out. Please check Solscan and submit the hash manually.");
