@@ -10,7 +10,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { QRCodeSVG } from "qrcode.react";
-import { Smartphone, Signal, Wallet, Loader2, RefreshCw, Database, AlertTriangle, ExternalLink, CheckCircle2, Copy, Check, ChevronDown, ArrowLeft } from "lucide-react";
+import { Smartphone, Signal, Wallet, Loader2, RefreshCw, Database, AlertTriangle, ExternalLink, CheckCircle2, Copy, Check, ChevronDown, ArrowLeft, QrCode } from "lucide-react";
 import type { Product } from "./product-card";
 import { FinalizeModal, type PaymentToken } from "./finalize-modal";
 import { useWallet } from "@/hooks/use-wallet";
@@ -348,6 +348,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const [copied, setCopied] = useState(false);
   const [showFinalize, setShowFinalize] = useState(false);
   const [showQRStep, setShowQRStep] = useState(false);
+  const [mobileUseWallet, setMobileUseWallet] = useState(false);
 
   const isMobile = useIsMobile();
   const { address, chainId, isConnected, isConnecting, connect } = useWallet();
@@ -386,6 +387,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       setCopied(false);
       setShowFinalize(false);
       setShowQRStep(false);
+      setMobileUseWallet(false);
     }
   }, [open]);
 
@@ -408,6 +410,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
     setTxError(null);
     setConfirmResult(null);
     setShowQRStep(false);
+    setMobileUseWallet(false);
   }, [paymentToken]);
 
   // Monitor chain confirmation (EVM tokens)
@@ -472,10 +475,11 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
   const isCompleted = txStatus === "completed";
   const isFailed = txStatus === "failed";
 
-  // Show QR for: mobile (all tokens), desktop eCash, desktop SOL/USDT_SOL with no injected Solana wallet
-  const showQRFlow = isMobile || paymentToken === "ECASH"
-    || (paymentToken === "SOL" && !solanaWallet.hasProvider)
-    || (paymentToken === "USDT_SOL" && !solanaWallet.hasProvider);
+  // Show QR for: eCash (always), mobile without wallet mode, desktop SOL/USDT_SOL with no injected provider
+  const showQRFlow = paymentToken === "ECASH"
+    || (isMobile && !mobileUseWallet)
+    || (paymentToken === "SOL" && !solanaWallet.hasProvider && (!isMobile || !mobileUseWallet))
+    || (paymentToken === "USDT_SOL" && !solanaWallet.hasProvider && (!isMobile || !mobileUseWallet));
 
   const shortAddress = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
   const balanceShortfall =
@@ -1119,6 +1123,40 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Mobile payment mode toggle ───────────────────────────── */}
+            {isMobile && paymentToken !== "ECASH" && !(showQRFlow && showQRStep) && (
+              <div className="flex rounded-lg bg-white/5 border border-white/10 p-0.5 gap-0.5">
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => setMobileUseWallet(false)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-all disabled:opacity-50 ${
+                    !mobileUseWallet
+                      ? "bg-[#06B6D4]/20 text-[#06B6D4]"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                >
+                  <QrCode className="h-3.5 w-3.5" />
+                  Manual / QR
+                </button>
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => setMobileUseWallet(true)}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-all disabled:opacity-50 ${
+                    mobileUseWallet
+                      ? "bg-[#06B6D4]/20 text-[#06B6D4]"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={{ touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  Connect Wallet
+                </button>
               </div>
             )}
 
