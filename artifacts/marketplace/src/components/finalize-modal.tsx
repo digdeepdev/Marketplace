@@ -244,7 +244,7 @@ export function FinalizeModal({
               <CheckCircle2 className="h-8 w-8 text-[#06B6D4] mx-auto" />
               <p className="text-sm font-semibold text-white">Purchase Submitted</p>
               <p className="text-[11px] text-muted-foreground">
-                Your transaction has been verified and the team has been notified.
+                Purchase submitted and team has been notified. Click <strong>Received</strong> once airtime/data is received.
               </p>
             </div>
           )}
@@ -282,7 +282,7 @@ export function FinalizeModal({
               className="w-full bg-[#06B6D4] text-black border-0 font-semibold h-11 hover:bg-[#0891B2]"
               onClick={onClose}
             >
-              Done
+              Received
             </Button>
           )}
         </div>
