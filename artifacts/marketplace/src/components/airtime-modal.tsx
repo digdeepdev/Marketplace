@@ -940,7 +940,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       return (
         <>
           <Button
-            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            className="w-full bg-[#06B6D4] hover:bg-[#0891B2] text-black border-0 font-bold h-11 shadow-lg shadow-cyan-500/40 ring-1 ring-cyan-400/60 transition-all duration-150"
             disabled={!canSpend || isBusy}
             onClick={handleEVMSpend}
           >
@@ -968,7 +968,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       return (
         <>
           <Button
-            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            className="w-full bg-[#06B6D4] hover:bg-[#0891B2] text-black border-0 font-bold h-11 shadow-lg shadow-cyan-500/40 ring-1 ring-cyan-400/60 transition-all duration-150"
             disabled={!canSpend || isBusy}
             onClick={handleEVMSpend}
           >
@@ -993,7 +993,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       return (
         <>
           <Button
-            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            className="w-full bg-[#06B6D4] hover:bg-[#0891B2] text-black border-0 font-bold h-11 shadow-lg shadow-cyan-500/40 ring-1 ring-cyan-400/60 transition-all duration-150"
             disabled={!canSpend || isBusy}
             onClick={handleEVMSpend}
           >
@@ -1018,7 +1018,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       return (
         <>
           <Button
-            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            className="w-full bg-[#06B6D4] hover:bg-[#0891B2] text-black border-0 font-bold h-11 shadow-lg shadow-cyan-500/40 ring-1 ring-cyan-400/60 transition-all duration-150"
             disabled={!canSpend || isBusy}
             onClick={handleSolSpend}
           >
@@ -1040,7 +1040,7 @@ export function AirtimeModal({ product, open, onClose }: AirtimeModalProps) {
       return (
         <>
           <Button
-            className="w-full btn-gradient text-white border-0 font-semibold h-11"
+            className="w-full bg-[#06B6D4] hover:bg-[#0891B2] text-black border-0 font-bold h-11 shadow-lg shadow-cyan-500/40 ring-1 ring-cyan-400/60 transition-all duration-150"
             disabled={!canSpend || isBusy}
             onClick={handleSolUsdtSpend}
           >
