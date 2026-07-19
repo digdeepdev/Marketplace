@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { logger } from "../lib/logger";
 import nodemailer from "nodemailer";
 
@@ -15,6 +16,7 @@ const ReviewSchema = z.object({
   rating: z.number().int().min(1).max(5),
   message: z.string(),
   createdAt: z.string(),
+  email: z.string().optional(),
 });
 
 export type Review = z.infer<typeof ReviewSchema>;
@@ -23,6 +25,7 @@ const PostReviewBody = z.object({
   name: z.string().min(1, "Name is required").max(100),
   rating: z.number().int().min(1).max(5),
   message: z.string().min(1, "Message is required").max(500),
+  reviewToken: z.string().min(1, "Email verification required"),
 });
 
 function readReviews(): Review[] {
@@ -46,6 +49,40 @@ function writeReviews(reviews: Review[]): void {
   fs.writeFileSync(REVIEWS_FILE, JSON.stringify(reviews, null, 2), "utf-8");
 }
 
+// ── OTP & token stores (in-memory, no DB needed) ─────────────────────────────
+interface OtpEntry { code: string; expiresAt: number; attempts: number; sentAt: number }
+interface TokenEntry { email: string; expiresAt: number }
+
+const otpStore = new Map<string, OtpEntry>();   // key: normalised email
+const tokenStore = new Map<string, TokenEntry>(); // key: random hex token
+
+const OTP_TTL_MS = 10 * 60 * 1000;    // 10 minutes
+const TOKEN_TTL_MS = 60 * 60 * 1000;  // 1 hour
+const MIN_RESEND_MS = 60 * 1000;       // can't re-request code within 60 s
+const MAX_ATTEMPTS = 5;                // wrong-code attempts before OTP is voided
+
+function generateOtp(): string {
+  return String(crypto.randomInt(100_000, 999_999));
+}
+
+function generateToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function cleanupExpired(): void {
+  const now = Date.now();
+  for (const [k, v] of otpStore) if (v.expiresAt < now) otpStore.delete(k);
+  for (const [k, v] of tokenStore) if (v.expiresAt < now) tokenStore.delete(k);
+}
+
+export function validateReviewToken(token: string): string | null {
+  cleanupExpired();
+  const entry = tokenStore.get(token);
+  if (!entry || entry.expiresAt < Date.now()) return null;
+  return entry.email;
+}
+
+// ── Email helpers ─────────────────────────────────────────────────────────────
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587;
 const SMTP_USER = process.env.SMTP_USER;
@@ -64,12 +101,46 @@ function makeTransporter() {
   });
 }
 
+async function sendEmail(to: string, subject: string, html: string, log?: import("pino").Logger): Promise<void> {
+  const transporter = makeTransporter();
+  if (transporter) {
+    try {
+      await transporter.sendMail({ from: `"Subrefill" <${SMTP_USER}>`, to, subject, html });
+      return;
+    } catch (err) {
+      log?.warn({ err }, "email: SMTP failed; falling back to Resend");
+    }
+  }
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+  if (!RESEND_API_KEY) { log?.warn("email: no SMTP or RESEND_API_KEY — email skipped"); return; }
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
+      body: JSON.stringify({ from: `Subrefill <${FROM_EMAIL}>`, to, subject, html }),
+    });
+    if (!res.ok) log?.warn({ status: res.status }, "email: Resend returned non-OK");
+  } catch (err) {
+    log?.warn({ err }, "email: Resend request failed");
+  }
+}
+
+function otpEmailHtml(code: string): string {
+  return `<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+    <h2 style="color:#06B6D4">Your Subrefill verification code</h2>
+    <p style="font-size:15px;color:#333">Use the code below to verify your email and leave a review. It expires in <strong>10 minutes</strong>.</p>
+    <div style="font-size:36px;font-weight:700;letter-spacing:8px;text-align:center;padding:24px;background:#f5f5f5;border-radius:8px;color:#111;margin:20px 0">${code}</div>
+    <p style="font-size:12px;color:#999">If you didn't request this, you can ignore this email.</p>
+  </div>`;
+}
+
 function buildReviewEmailHtml(review: Review): string {
   const stars = "★".repeat(review.rating) + "☆".repeat(5 - review.rating);
   return `<div style="font-family:Arial,sans-serif;max-width:600px">
     <h2 style="color:#136FD3">⭐ New Review Submitted</h2>
     <table style="border-collapse:collapse;width:100%">
       <tr><td style="padding:8px;border:1px solid #ddd"><strong>Name</strong></td><td style="padding:8px;border:1px solid #ddd">${review.name}</td></tr>
+      ${review.email ? `<tr><td style="padding:8px;border:1px solid #ddd"><strong>Email</strong></td><td style="padding:8px;border:1px solid #ddd">${review.email}</td></tr>` : ""}
       <tr><td style="padding:8px;border:1px solid #ddd"><strong>Rating</strong></td><td style="padding:8px;border:1px solid #ddd">${stars} (${review.rating}/5)</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd"><strong>Message</strong></td><td style="padding:8px;border:1px solid #ddd">${review.message}</td></tr>
       <tr><td style="padding:8px;border:1px solid #ddd"><strong>Date</strong></td><td style="padding:8px;border:1px solid #ddd">${new Date(review.createdAt).toLocaleString()}</td></tr>
@@ -77,61 +148,75 @@ function buildReviewEmailHtml(review: Review): string {
   </div>`;
 }
 
-async function sendReviewEmail(review: Review, log?: import("pino").Logger): Promise<void> {
-  const subject = `New Review from ${review.name} — ${review.rating}/5 stars`;
-  const html = buildReviewEmailHtml(review);
-  const transporter = makeTransporter();
+// ── OTP routes ────────────────────────────────────────────────────────────────
+router.post("/reviews/otp/send", async (req: Request, res: Response): Promise<void> => {
+  const body = z.object({ email: z.string().email("Valid email required") }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.issues[0]?.message ?? "Invalid email" }); return; }
 
-  if (transporter) {
-    try {
-      await transporter.sendMail({
-        from: `"Marketplace Reviews" <${SMTP_USER}>`,
-        to: NOTIFICATION_EMAIL,
-        subject,
-        html,
-      });
-      return;
-    } catch (err) {
-      log?.warn({ err }, "reviews: SMTP failed; falling back to Resend");
-    }
-  }
+  const email = body.data.email.toLowerCase().trim();
+  cleanupExpired();
 
-  const RESEND_API_KEY = process.env.RESEND_API_KEY;
-  if (!RESEND_API_KEY) {
-    log?.warn("reviews: no SMTP or RESEND_API_KEY configured — email skipped");
+  const existing = otpStore.get(email);
+  if (existing && Date.now() - existing.sentAt < MIN_RESEND_MS) {
+    const waitSec = Math.ceil((MIN_RESEND_MS - (Date.now() - existing.sentAt)) / 1000);
+    res.status(429).json({ error: `Please wait ${waitSec}s before requesting another code.` });
     return;
   }
 
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
-      body: JSON.stringify({ from: `Marketplace Reviews <${FROM_EMAIL}>`, to: NOTIFICATION_EMAIL, subject, html }),
-    });
-    if (!res.ok) log?.warn({ status: res.status }, "reviews: Resend returned non-OK status");
-  } catch (err) {
-    log?.warn({ err }, "reviews: Resend request failed");
-  }
-}
+  const code = generateOtp();
+  otpStore.set(email, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0, sentAt: Date.now() });
 
+  await sendEmail(email, "Your Subrefill verification code", otpEmailHtml(code), req.log);
+  req.log.info({ email }, "OTP sent for review verification");
+  res.json({ sent: true });
+});
+
+router.post("/reviews/otp/verify", (req: Request, res: Response): void => {
+  const body = z.object({
+    email: z.string().email(),
+    code: z.string().length(6, "Code must be 6 digits"),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: body.error.issues[0]?.message ?? "Invalid request" }); return; }
+
+  const email = body.data.email.toLowerCase().trim();
+  cleanupExpired();
+
+  const entry = otpStore.get(email);
+  if (!entry || entry.expiresAt < Date.now()) {
+    res.status(400).json({ error: "Code expired or not found. Please request a new one." });
+    return;
+  }
+  if (entry.attempts >= MAX_ATTEMPTS) {
+    otpStore.delete(email);
+    res.status(400).json({ error: "Too many wrong attempts. Please request a new code." });
+    return;
+  }
+  if (entry.code !== body.data.code.trim()) {
+    entry.attempts += 1;
+    const left = MAX_ATTEMPTS - entry.attempts;
+    res.status(400).json({ error: `Incorrect code. ${left} attempt${left !== 1 ? "s" : ""} remaining.` });
+    return;
+  }
+
+  otpStore.delete(email);
+  const token = generateToken();
+  tokenStore.set(token, { email, expiresAt: Date.now() + TOKEN_TTL_MS });
+  req.log.info({ email }, "OTP verified — review token issued");
+  res.json({ token, email });
+});
+
+// ── Admin delete ──────────────────────────────────────────────────────────────
 router.delete("/reviews/:id", (req: Request, res: Response): void => {
   const adminKey = process.env.ADMIN_KEY;
   const authHeader = req.headers["authorization"];
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
 
-  if (!adminKey || token !== adminKey) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
+  if (!adminKey || token !== adminKey) { res.status(401).json({ error: "Unauthorized" }); return; }
 
   const { id } = req.params;
-  let reviews = readReviews();
+  const reviews = readReviews();
   const index = reviews.findIndex((r) => r.id === id);
-
-  if (index === -1) {
-    res.status(404).json({ error: "Review not found" });
-    return;
-  }
+  if (index === -1) { res.status(404).json({ error: "Review not found" }); return; }
 
   reviews.splice(index, 1);
   try {
@@ -146,11 +231,13 @@ router.delete("/reviews/:id", (req: Request, res: Response): void => {
   res.status(200).json({ success: true });
 });
 
+// ── Public read ───────────────────────────────────────────────────────────────
 router.get("/reviews", (_req: Request, res: Response): void => {
   const reviews = readReviews();
   res.json(reviews);
 });
 
+// ── Authenticated submit ──────────────────────────────────────────────────────
 router.post("/reviews", async (req: Request, res: Response): Promise<void> => {
   const parsed = PostReviewBody.safeParse(req.body);
   if (!parsed.success) {
@@ -158,12 +245,20 @@ router.post("/reviews", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const { name, rating, message } = parsed.data;
+  const { name, rating, message, reviewToken } = parsed.data;
+
+  const email = validateReviewToken(reviewToken);
+  if (!email) {
+    res.status(401).json({ error: "Email verification required or session expired. Please verify your email again." });
+    return;
+  }
+
   const newReview: Review = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
     name: name.trim(),
     rating,
     message: message.trim(),
+    email,
     createdAt: new Date().toISOString(),
   };
 
@@ -178,13 +273,18 @@ router.post("/reviews", async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  req.log.info({ id: newReview.id, name: newReview.name, rating: newReview.rating }, "New review saved");
+  req.log.info({ id: newReview.id, name: newReview.name, rating: newReview.rating, email }, "New review saved");
 
-  sendReviewEmail(newReview, req.log).catch((err) => {
-    req.log.warn({ err }, "reviews: email send failed (non-fatal)");
-  });
+  sendEmail(
+    NOTIFICATION_EMAIL,
+    `New Review from ${newReview.name} — ${newReview.rating}/5 stars`,
+    buildReviewEmailHtml(newReview),
+    req.log,
+  ).catch((err) => req.log.warn({ err }, "reviews: notification email failed (non-fatal)"));
 
-  res.status(201).json(newReview);
+  const { email: _email, ...publicReview } = newReview;
+  void _email;
+  res.status(201).json(publicReview);
 });
 
 export default router;
