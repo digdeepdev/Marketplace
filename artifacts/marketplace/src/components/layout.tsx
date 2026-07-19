@@ -3,8 +3,8 @@ import { Zap, Star, ArrowLeftRight } from "lucide-react";
 import logoUrl from "@assets/Subrefill_1782727570118.svg?url";
 
 const NAV_TABS = [
-  { href: "/", label: "Top Up", icon: Zap },
   { href: "/reviews", label: "Reviews", icon: Star },
+  { href: "/", label: "Top Up", icon: Zap },
   { href: "/p2p", label: "P2P", icon: ArrowLeftRight },
 ];
 
