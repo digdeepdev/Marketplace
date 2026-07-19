@@ -3,12 +3,14 @@ import { Toaster } from "@/components/ui/toaster";
 import NotFound from "@/pages/not-found";
 import Marketplace from "@/pages/marketplace";
 import Reviews from "@/pages/reviews";
+import P2P from "@/pages/p2p";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Marketplace} />
       <Route path="/reviews" component={Reviews} />
+      <Route path="/p2p" component={P2P} />
       <Route component={NotFound} />
     </Switch>
   );
