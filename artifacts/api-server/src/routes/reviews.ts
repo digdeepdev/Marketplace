@@ -114,6 +114,38 @@ async function sendReviewEmail(review: Review, log?: import("pino").Logger): Pro
   }
 }
 
+router.delete("/reviews/:id", (req: Request, res: Response): void => {
+  const adminKey = process.env.ADMIN_KEY;
+  const authHeader = req.headers["authorization"];
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
+
+  if (!adminKey || token !== adminKey) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const { id } = req.params;
+  let reviews = readReviews();
+  const index = reviews.findIndex((r) => r.id === id);
+
+  if (index === -1) {
+    res.status(404).json({ error: "Review not found" });
+    return;
+  }
+
+  reviews.splice(index, 1);
+  try {
+    writeReviews(reviews);
+  } catch (err) {
+    req.log.error({ err }, "reviews: failed to write reviews file after delete");
+    res.status(500).json({ error: "Failed to delete review. Please try again." });
+    return;
+  }
+
+  req.log.info({ id }, "Review deleted by admin");
+  res.status(200).json({ success: true });
+});
+
 router.get("/reviews", (_req: Request, res: Response): void => {
   const reviews = readReviews();
   res.json(reviews);
