@@ -101,27 +101,36 @@ function makeTransporter() {
   });
 }
 
-async function sendEmail(to: string, subject: string, html: string, log?: import("pino").Logger): Promise<void> {
+async function sendEmail(to: string, subject: string, html: string, log?: import("pino").Logger): Promise<{ ok: boolean; error?: string }> {
   const transporter = makeTransporter();
   if (transporter) {
     try {
       await transporter.sendMail({ from: `"Subrefill" <${SMTP_USER}>`, to, subject, html });
-      return;
+      return { ok: true };
     } catch (err) {
       log?.warn({ err }, "email: SMTP failed; falling back to Resend");
     }
   }
   const RESEND_API_KEY = process.env.RESEND_API_KEY;
-  if (!RESEND_API_KEY) { log?.warn("email: no SMTP or RESEND_API_KEY — email skipped"); return; }
+  if (!RESEND_API_KEY) {
+    log?.warn("email: no SMTP or RESEND_API_KEY configured");
+    return { ok: false, error: "Email service not configured" };
+  }
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
       body: JSON.stringify({ from: `Subrefill <${FROM_EMAIL}>`, to, subject, html }),
     });
-    if (!res.ok) log?.warn({ status: res.status }, "email: Resend returned non-OK");
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      log?.warn({ status: res.status, body }, "email: Resend returned non-OK");
+      return { ok: false, error: `Email delivery failed (status ${res.status})` };
+    }
+    return { ok: true };
   } catch (err) {
     log?.warn({ err }, "email: Resend request failed");
+    return { ok: false, error: "Email delivery failed" };
   }
 }
 
@@ -166,7 +175,14 @@ router.post("/reviews/otp/send", async (req: Request, res: Response): Promise<vo
   const code = generateOtp();
   otpStore.set(email, { code, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0, sentAt: Date.now() });
 
-  await sendEmail(email, "Your Subrefill verification code", otpEmailHtml(code), req.log);
+  const result = await sendEmail(email, "Your Subrefill verification code", otpEmailHtml(code), req.log);
+  if (!result.ok) {
+    // Remove the OTP so they can retry cleanly
+    otpStore.delete(email);
+    req.log.warn({ email, error: result.error }, "OTP email failed to send");
+    res.status(500).json({ error: "Failed to send verification code. Please try again shortly." });
+    return;
+  }
   req.log.info({ email }, "OTP sent for review verification");
   res.json({ sent: true });
 });
