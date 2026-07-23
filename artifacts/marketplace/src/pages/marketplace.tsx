@@ -163,7 +163,7 @@ export default function Marketplace() {
                       <>
                         <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">{slide.title}</h2>
                         <p className="text-white/70 text-sm md:text-base max-w-md mb-6">{slide.subtitle}</p>
-                        <a href={slide.category === "banner" ? "#airtime-section" : "#merch-section"}>
+                        <a className="md:hidden" href={slide.category === "banner" ? "#airtime-section" : "#merch-section"}>
                           <Button className="bg-[#06B6D4] text-black border-0 hover:bg-[#0891B2]" size="sm">
                             {slide.cta}
                             <ArrowRight className="h-4 w-4 ml-2" />
