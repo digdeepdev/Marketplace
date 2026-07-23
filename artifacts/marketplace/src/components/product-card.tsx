@@ -23,7 +23,26 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
 
   return (
     <Card
-      className="group overflow-hidden border-white/5 bg-card/50 transition-all hover:bg-card hover:border-primary/30 hover:shadow-[0_0_30px_-10px_rgba(19,111,211,0.2)] cursor-pointer"
+      className={
+        isAirtime
+          ? [
+              "group overflow-hidden cursor-pointer",
+              // Glass base: translucent bg + modest blur (8px keeps GPU happy on mobile)
+              "bg-white/5 [backdrop-filter:blur(8px)] [-webkit-backdrop-filter:blur(8px)]",
+              // Solid fallback for browsers without backdrop-filter
+              "[@supports_not_(backdrop-filter:blur(1px))]:bg-[#0d1a2a]/80",
+              // Border: subtle light top-left highlight + faint outline
+              "border border-white/10",
+              "shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_1px_0_0_rgba(255,255,255,0.04)]",
+              // Hover: gentle cyan glow, lifted border
+              "transition-all duration-300 will-change-transform",
+              "hover:border-[#06B6D4]/40",
+              "hover:shadow-[inset_0_1px_0_rgba(6,182,212,0.15),inset_1px_0_0_rgba(6,182,212,0.08),0_0_24px_-6px_rgba(6,182,212,0.35)]",
+              "hover:bg-white/8",
+              "active:scale-[0.98]",
+            ].join(" ")
+          : "group overflow-hidden border-white/5 bg-card/50 transition-all hover:bg-card hover:border-primary/30 hover:shadow-[0_0_30px_-10px_rgba(19,111,211,0.2)] cursor-pointer"
+      }
       onClick={onClick}
     >
       <div className="aspect-[16/10] relative overflow-hidden bg-muted/30 border-b border-white/5 flex items-center justify-center">
