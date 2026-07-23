@@ -4,7 +4,7 @@ import logoUrl from "@assets/Subrefill_1782727570118.svg?url";
 
 const NAV_TABS = [
   { href: "/reviews", label: "Reviews", icon: Star },
-  { href: "/", label: "Top Up", icon: Zap },
+  { href: "/top-up", label: "Top Up", icon: Zap },
   { href: "/p2p", label: "P2P", icon: ArrowLeftRight },
 ];
 
