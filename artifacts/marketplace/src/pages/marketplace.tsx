@@ -196,7 +196,7 @@ export default function Marketplace() {
       </section>
 
       {/* Ad Banner */}
-      <section className="container mx-auto px-4 pb-4 z-10">
+      <section className="md:hidden container mx-auto px-4 pb-4 z-10">
         <div className="relative rounded-xl overflow-hidden border border-white/10 bg-gradient-to-r from-[#06B6D4]/15 via-[#0d0d1a] to-white/5">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(6,182,212,0.10)_0%,transparent_70%)]" />
           <div className="relative flex items-center justify-between gap-4 px-5 py-3">
@@ -224,7 +224,7 @@ export default function Marketplace() {
       </section>
 
       {/* Airtime & Data Section */}
-      <section id="airtime-section" className="container mx-auto px-4 pb-12 z-10">
+      <section id="airtime-section" className="md:hidden container mx-auto px-4 pb-12 z-10">
         <div className="flex items-center gap-2 mb-6">
           <div className="h-8 w-8 rounded-lg bg-[#06B6D4]/15 flex items-center justify-center">
             <Smartphone className="h-4 w-4 text-[#06B6D4]" />
