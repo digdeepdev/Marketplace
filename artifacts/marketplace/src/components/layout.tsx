@@ -1,15 +1,17 @@
 import { Link, useLocation } from "wouter";
 import { Zap, Star, ArrowLeftRight } from "lucide-react";
 import logoUrl from "@assets/Subrefill_1782727570118.svg?url";
-
-const NAV_TABS = [
-  { href: "/reviews", label: "Reviews", icon: Star },
-  { href: "/top-up", label: "Top Up", icon: Zap },
-  { href: "/p2p", label: "P2P", icon: ArrowLeftRight },
-];
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const isMobile = useIsMobile(768);
+
+  const NAV_TABS = [
+    { href: "/reviews", label: "Reviews", icon: Star },
+    { href: isMobile ? "/" : "/top-up", label: "Top Up", icon: Zap },
+    { href: "/p2p", label: "P2P", icon: ArrowLeftRight },
+  ];
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "hsl(240,10%,4%)", color: "hsl(0,0%,95%)" }}>
