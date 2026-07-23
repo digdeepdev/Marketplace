@@ -57,19 +57,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 gap: 4,
                 textDecoration: "none",
                 color: active ? "#06B6D4" : "rgba(255,255,255,0.4)",
-                transition: "color 0.15s",
+                transition: "color 0.2s",
                 cursor: "pointer",
+                position: "relative",
               }}
             >
+              {/* Filled pill highlight for active tab */}
+              <span
+                style={{
+                  position: "absolute",
+                  inset: "8px 16px",
+                  borderRadius: 14,
+                  background: active ? "rgba(6,182,212,0.13)" : "transparent",
+                  border: `1px solid ${active ? "rgba(6,182,212,0.28)" : "transparent"}`,
+                  transition: "background 0.2s, border-color 0.2s",
+                  pointerEvents: "none",
+                }}
+              />
               <Icon
                 style={{
                   width: 22,
                   height: 22,
                   strokeWidth: active ? 2.2 : 1.8,
                   fill: active ? "rgba(6,182,212,0.15)" : "transparent",
+                  position: "relative",
                 }}
               />
-              <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, letterSpacing: "0.02em" }}>
+              <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, letterSpacing: "0.02em", position: "relative" }}>
                 {label}
               </span>
               {active && (
