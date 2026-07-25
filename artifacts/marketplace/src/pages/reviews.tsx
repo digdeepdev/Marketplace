@@ -5,6 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Star, MessageSquare, Loader2, Mail, ShieldCheck, ArrowLeft } from "lucide-react";
+import { useSeo } from "@/lib/seo";
+import { SITE_ORIGIN } from "@/lib/airtime-products";
 
 interface Review {
   id: string;
@@ -100,6 +102,11 @@ type Step = "email" | "otp" | "review";
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function Reviews() {
+  useSeo({
+    title: "Customer Reviews | Subrefill",
+    description: "Read verified customer reviews of Subrefill — buy airtime and data with crypto.",
+    canonicalUrl: `${SITE_ORIGIN}/reviews`,
+  });
   const { toast } = useToast();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);

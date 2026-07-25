@@ -1,7 +1,14 @@
 import { Layout } from "@/components/layout";
 import { ArrowLeftRight, Clock } from "lucide-react";
+import { useSeo } from "@/lib/seo";
+import { SITE_ORIGIN } from "@/lib/airtime-products";
 
 export default function P2P() {
+  useSeo({
+    title: "P2P Trading | Subrefill",
+    description: "Peer-to-peer crypto trading on Subrefill — coming soon.",
+    canonicalUrl: `${SITE_ORIGIN}/p2p`,
+  });
   return (
     <Layout>
       <div

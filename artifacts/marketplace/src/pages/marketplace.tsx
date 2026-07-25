@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,11 +14,14 @@ import Autoplay from "embla-carousel-autoplay";
 import { ProductCard, Product } from "@/components/product-card";
 import { AirtimeModal } from "@/components/airtime-modal";
 import { MerchComingSoonModal } from "@/components/merch-coming-soon-modal";
-import mtnLogoUrl from "@assets/MTN_Nigeria_1780562125673.svg?url";
-import airtelLogoUrl from "@assets/Airtel_Nigeria_1780567636022.svg?url";
-import gloLogoUrl from "@assets/Glo_Nigeria_1780568187203.svg?url";
-import t2LogoUrl from "@assets/T2_Nigeria_1780571958531.svg?url";
 import carouselBgUrl from "@assets/header_(1)_1780589750503.png?url";
+import {
+  AIRTIME_PRODUCTS,
+  SITE_ORIGIN,
+  airtimeProductUrl,
+  getAirtimeProductBySlug,
+} from "@/lib/airtime-products";
+import { useSeo } from "@/lib/seo";
 import verseTeeUrl from "@assets/Threaded_Round_Neck_(1)_1780683904381.png?url";
 import verseHoodieUrl from "@assets/quarterzip_hoodie_1780685237495.png?url";
 import verseCapUrl from "@assets/fila_cap_1780685259464.png?url";
@@ -27,44 +31,33 @@ const CAROUSEL_SLIDES = [
   { title: "Airtime & Data", subtitle: "Top up across all Nigerian networks", cta: "Spend Now", category: "banner", image: carouselBgUrl },
 ];
 
-const AIRTIME_PRODUCTS: Product[] = [
-  {
-    id: "airtime-1",
-    name: "MTN Refill",
-    description: "Buy MTN Airtime and Data With Crypto.",
-    price: 1000,
-    currency: "₦",
-    thumbnail: mtnLogoUrl,
-    type: "airtime",
-  },
-  {
-    id: "airtime-2",
-    name: "Airtel Refill",
-    description: "Buy Airtel Airtime and Data With Crypto.",
-    price: 3000,
-    currency: "₦",
-    thumbnail: airtelLogoUrl,
-    type: "airtime",
-  },
-  {
-    id: "airtime-3",
-    name: "Glo Refill",
-    description: "Buy Glo Airtime and Data With Crypto.",
-    price: 1500,
-    currency: "₦",
-    thumbnail: gloLogoUrl,
-    type: "airtime",
-  },
-  {
-    id: "airtime-4",
-    name: "T2 Mobile",
-    description: "Buy T2Mobile Airtime and Data With Crypto.",
-    price: 500,
-    currency: "₦",
-    thumbnail: t2LogoUrl,
-    type: "airtime",
-  },
-];
+function productJsonLd(product: (typeof AIRTIME_PRODUCTS)[number]) {
+  return {
+    "@type": "Product",
+    name: product.name,
+    description: product.description,
+    url: airtimeProductUrl(product),
+    brand: { "@type": "Brand", name: product.name.split(" ")[0] },
+    offers: {
+      "@type": "Offer",
+      price: product.price,
+      priceCurrency: "NGN",
+      availability: "https://schema.org/InStock",
+      url: airtimeProductUrl(product),
+    },
+  };
+}
+
+const ITEM_LIST_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  name: "Airtime & Data Products",
+  itemListElement: AIRTIME_PRODUCTS.map((product, idx) => ({
+    "@type": "ListItem",
+    position: idx + 1,
+    item: productJsonLd(product),
+  })),
+};
 
 const MERCH_PRODUCTS: Product[] = [
   {
@@ -107,16 +100,52 @@ const MERCH_PRODUCTS: Product[] = [
   },
 ];
 
-export default function Marketplace() {
+interface MarketplaceProps {
+  /** When set (from /airtime/:slug routes), opens that product's purchase flow. */
+  productSlug?: string;
+}
+
+export default function Marketplace({ productSlug }: MarketplaceProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [merchModalOpen, setMerchModalOpen] = useState(false);
   const carouselRef = useRef<any>(null);
+  const [, navigate] = useLocation();
 
-  const handleAirtimeClick = (product: Product) => {
-    setSelectedProduct(product);
-    setModalOpen(true);
+  const routeProduct = productSlug ? getAirtimeProductBySlug(productSlug) : undefined;
+
+  useSeo(
+    routeProduct
+      ? {
+          title: `${routeProduct.name} — ${routeProduct.description.replace(/\.$/, "")} | Subrefill`,
+          description: routeProduct.description,
+          canonicalUrl: airtimeProductUrl(routeProduct),
+          ogType: "product",
+          jsonLd: { "@context": "https://schema.org", ...productJsonLd(routeProduct) },
+        }
+      : {
+          title: "Subrefill Marketplace — Buy Airtime & Data with Crypto",
+          description:
+            "Buy MTN, Airtel, Glo and T2 Mobile airtime and data with crypto. Pay with VERSE, USDT, SOL or eCash.",
+          canonicalUrl: `${SITE_ORIGIN}/`,
+          jsonLd: ITEM_LIST_JSON_LD,
+        },
+  );
+
+  // Deep link: open the purchase flow for /airtime/:slug
+  useEffect(() => {
+    if (routeProduct) {
+      setSelectedProduct(routeProduct);
+      setModalOpen(true);
+    } else {
+      setModalOpen(false);
+    }
+  }, [routeProduct]);
+
+  const handleModalClose = () => {
+    setModalOpen(false);
+    if (routeProduct) navigate("/");
   };
 
   const handleMerchClick = () => {
@@ -234,13 +263,20 @@ export default function Marketplace() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {AIRTIME_PRODUCTS.map((product) => (
-            <ProductCard key={product.id} product={product} onClick={() => handleAirtimeClick(product)} />
+            <Link
+              key={product.id}
+              href={`/airtime/${product.slug}`}
+              className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[#06B6D4] rounded-xl"
+              aria-label={`${product.name} — ${product.description}`}
+            >
+              <ProductCard product={product} />
+            </Link>
           ))}
         </div>
       </section>
 
 
-      <AirtimeModal product={selectedProduct} open={modalOpen} onClose={() => setModalOpen(false)} />
+      <AirtimeModal product={selectedProduct} open={modalOpen} onClose={handleModalClose} />
       <MerchComingSoonModal open={merchModalOpen} onClose={() => setMerchModalOpen(false)} />
     </Layout>
   );

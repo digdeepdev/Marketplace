@@ -9,7 +9,10 @@ import TopUp from "@/pages/top-up";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Marketplace} />
+      <Route path="/">{() => <Marketplace />}</Route>
+      <Route path="/airtime/:slug">
+        {(params) => <Marketplace productSlug={params.slug} />}
+      </Route>
       <Route path="/top-up" component={TopUp} />
       <Route path="/reviews" component={Reviews} />
       <Route path="/p2p" component={P2P} />

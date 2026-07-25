@@ -1,60 +1,17 @@
-import { useState } from "react";
+import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { Smartphone } from "lucide-react";
-import { ProductCard, Product } from "@/components/product-card";
-import { AirtimeModal } from "@/components/airtime-modal";
-import mtnLogoUrl from "@assets/MTN_Nigeria_1780562125673.svg?url";
-import airtelLogoUrl from "@assets/Airtel_Nigeria_1780567636022.svg?url";
-import gloLogoUrl from "@assets/Glo_Nigeria_1780568187203.svg?url";
-import t2LogoUrl from "@assets/T2_Nigeria_1780571958531.svg?url";
-
-const AIRTIME_PRODUCTS: Product[] = [
-  {
-    id: "airtime-1",
-    name: "MTN Refill",
-    description: "Buy MTN Airtime and Data With Crypto.",
-    price: 1000,
-    currency: "₦",
-    thumbnail: mtnLogoUrl,
-    type: "airtime",
-  },
-  {
-    id: "airtime-2",
-    name: "Airtel Refill",
-    description: "Buy Airtel Airtime and Data With Crypto..",
-    price: 3000,
-    currency: "₦",
-    thumbnail: airtelLogoUrl,
-    type: "airtime",
-  },
-  {
-    id: "airtime-3",
-    name: "Glo Refill",
-    description: "Buy Glo Airtime and Data With Crypto.",
-    price: 1500,
-    currency: "₦",
-    thumbnail: gloLogoUrl,
-    type: "airtime",
-  },
-  {
-    id: "airtime-4",
-    name: "T2 Mobile",
-    description: "Buy T2Mobile Airtime and Data With Crypto.",
-    price: 500,
-    currency: "₦",
-    thumbnail: t2LogoUrl,
-    type: "airtime",
-  },
-];
+import { ProductCard } from "@/components/product-card";
+import { AIRTIME_PRODUCTS, SITE_ORIGIN } from "@/lib/airtime-products";
+import { useSeo } from "@/lib/seo";
 
 export default function TopUp() {
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-
-  const handleAirtimeClick = (product: Product) => {
-    setSelectedProduct(product);
-    setModalOpen(true);
-  };
+  useSeo({
+    title: "Top Up Airtime & Data with Crypto | Subrefill",
+    description:
+      "Top up MTN, Airtel, Glo and T2 Mobile airtime and data instantly with crypto on Subrefill.",
+    canonicalUrl: `${SITE_ORIGIN}/top-up`,
+  });
 
   return (
     <Layout>
@@ -97,12 +54,18 @@ export default function TopUp() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
           {AIRTIME_PRODUCTS.map((product) => (
-            <ProductCard key={product.id} product={product} onClick={() => handleAirtimeClick(product)} />
+            <Link
+              key={product.id}
+              href={`/airtime/${product.slug}`}
+              className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-[#06B6D4] rounded-xl"
+              aria-label={`${product.name} — ${product.description}`}
+            >
+              <ProductCard product={product} />
+            </Link>
           ))}
         </div>
       </section>
 
-      <AirtimeModal product={selectedProduct} open={modalOpen} onClose={() => setModalOpen(false)} />
     </Layout>
   );
 }
