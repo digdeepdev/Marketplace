@@ -11,8 +11,8 @@ import t2LogoUrl from "@assets/T2_Nigeria_1780571958531.svg?url";
 const AIRTIME_PRODUCTS: Product[] = [
   {
     id: "airtime-1",
-    name: "MTN",
-    description: "Instant MTN recharge. Valid for 30 days. Delivered via PIN.",
+    name: "MTN Refill",
+    description: "Buy MTN Airtime and Data With Crypto.",
     price: 1000,
     currency: "₦",
     thumbnail: mtnLogoUrl,
@@ -20,8 +20,8 @@ const AIRTIME_PRODUCTS: Product[] = [
   },
   {
     id: "airtime-2",
-    name: "Airtel",
-    description: "10GB monthly data bundle. Valid for 30 days.",
+    name: "Airtel Refill",
+    description: "Buy Airtel Airtime and Data With Crypto..",
     price: 3000,
     currency: "₦",
     thumbnail: airtelLogoUrl,
@@ -29,8 +29,8 @@ const AIRTIME_PRODUCTS: Product[] = [
   },
   {
     id: "airtime-3",
-    name: "Glo",
-    description: "5GB GLO data bundle. Valid for 30 days.",
+    name: "Glo Refill",
+    description: "Buy Glo Airtime and Data With Crypto.",
     price: 1500,
     currency: "₦",
     thumbnail: gloLogoUrl,
@@ -39,7 +39,7 @@ const AIRTIME_PRODUCTS: Product[] = [
   {
     id: "airtime-4",
     name: "T2 Mobile",
-    description: "Instant T2 Mobile recharge. Valid for 30 days.",
+    description: "Buy T2Mobile Airtime and Data With Crypto.",
     price: 500,
     currency: "₦",
     thumbnail: t2LogoUrl,
