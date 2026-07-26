@@ -14,7 +14,7 @@ export const AIRTIME_PRODUCTS: AirtimeProduct[] = [
   {
     id: "airtime-1",
     slug: "mtn",
-    name: "MTN Refill",
+    name: "MTN",
     description: "Buy MTN Airtime and Data With Crypto.",
     price: 1000,
     currency: "₦",
@@ -24,7 +24,7 @@ export const AIRTIME_PRODUCTS: AirtimeProduct[] = [
   {
     id: "airtime-2",
     slug: "airtel",
-    name: "Airtel Refill",
+    name: "Airtel",
     description: "Buy Airtel Airtime and Data With Crypto.",
     price: 3000,
     currency: "₦",
@@ -34,7 +34,7 @@ export const AIRTIME_PRODUCTS: AirtimeProduct[] = [
   {
     id: "airtime-3",
     slug: "glo",
-    name: "Glo Refill",
+    name: "Glo",
     description: "Buy Glo Airtime and Data With Crypto.",
     price: 1500,
     currency: "₦",
