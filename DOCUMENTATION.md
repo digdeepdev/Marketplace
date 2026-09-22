@@ -10,7 +10,7 @@ Primary use cases:
 
 - data bundles bill payment
 - airtime bill payment
-- Paying with supported (verse, solana, usdt,…) cryptocurrencies
+- Paying with supported (verse, solana, usdt,usdc…) cryptocurrencies
 
 ## Key Features
 
@@ -37,6 +37,7 @@ Note: Specific plan details, pricing, and availability can change. Always check 
 Confirmed payment options include:
 
 - Verse
+- USDC (Arc)
 - Solana (SOL)
 - USDT (Solana SPL, BEP20, Polygon)
 - Additional cryptocurrencies (as listed on the platform)
